@@ -2,6 +2,22 @@
 
 **«Создай свою зону. Владей своим пространством.»**
 
+[![CI](https://github.com/kernelavg/justtld/actions/workflows/ci.yml/badge.svg)](https://github.com/kernelavg/justtld/actions/workflows/ci.yml)
+[![Integration](https://github.com/kernelavg/justtld/actions/workflows/integration.yml/badge.svg)](https://github.com/kernelavg/justtld/actions/workflows/integration.yml)
+
+> **Живой деплой в Sepolia (chainId 11155111).**
+>
+> | | |
+> | --- | --- |
+> | Контракт | [`0x040e0F550dE73Aa796131A3C503B0189303CB298`](https://sepolia.etherscan.io/address/0x040e0F550dE73Aa796131A3C503B0189303CB298#code) — Source Code Verified |
+> | Владелец / админ | [`0x2ba51777889785cC53871463Bf8e4db95Fc8d886`](https://sepolia.etherscan.io/address/0x2ba51777889785cC53871463Bf8e4db95Fc8d886) |
+> | Sourcify | [exact_match](https://repo.sourcify.dev/contracts/11155111/0x040e0F550dE73Aa796131A3C503B0189303CB298) (creation + runtime) |
+> | Публичная страница | https://justtld.infinityfreeapp.com — статика без сервера, регистрация зон из браузера |
+> | Деплой / проверка | `npm run deploy:sepolia`, `npm run verify:sepolia` |
+>
+> Публикация исходников, метрики газа и план перехода на основную сеть: [`docs/PUBLIC-DEPLOY.md`](docs/PUBLIC-DEPLOY.md).
+> Хостинг сайта с базой: [`docs/DEPLOY-PAAS.md`](docs/DEPLOY-PAAS.md).
+
 Децентрализованный реестр верхнеуровневых зон (TLD) на локальной EVM-сети.
 Контракт — источник истины, PostgreSQL — кэш, поиск и история, indexer — мост между ними.
 Всё работает локально, в терминале: без Vercel, без облачных сервисов, без моков.
