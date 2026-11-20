@@ -7,19 +7,30 @@ import { adminAddress, chainId, deployment } from '@/lib/server/config';
 
 export const dynamic = 'force-dynamic';
 
-/** Состояние keep-alive (файл-сердцебиение пишет scripts/keep-alive.mjs). */
-function readKeepAlive(): Record<string, unknown> | null {
+/** Состояние keep-alive: настройки из окружения + сердцебиение от scripts/keep-alive.mjs. */
+function readKeepAlive(): Record<string, unknown> {
   const file = process.env.KEEP_ALIVE_HEARTBEAT_FILE ?? '/tmp/justtld-keep-alive.json';
+  const target = process.env.KEEP_ALIVE_URL ?? process.env.RENDER_EXTERNAL_URL ?? null;
+  const configured = (process.env.KEEP_ALIVE_ENABLED ?? 'false').toLowerCase() === 'true';
+
+  let heartbeat: Record<string, unknown> | null = null;
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
     const lastPingAt = typeof raw.lastPingAt === 'string' ? raw.lastPingAt : null;
-    return {
+    heartbeat = {
       ...raw,
       ageSeconds: lastPingAt ? Math.round((Date.now() - Date.parse(lastPingAt)) / 1000) : null,
     };
   } catch {
-    return null;
+    heartbeat = null;
   }
+
+  return {
+    configured,
+    target,
+    intervalSeconds: Number.parseInt(process.env.KEEP_ALIVE_INTERVAL_SECONDS ?? '870', 10),
+    heartbeat,
+  };
 }
 
 export const GET = route(
