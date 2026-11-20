@@ -1,0 +1,38 @@
+name: Keep-alive
+
+# Второй, внешний слой защиты от «сна» бесплатного инстанса Render:
+# GitHub пингует сайт из своей инфраструктуры, независимо от того, жив ли контейнер.
+# Основной слой — scripts/keep-alive.mjs внутри контейнера (каждые 14 мин 30 с).
+
+on:
+  schedule:
+    - cron: '*/12 * * * *' # каждые 12 минут
+  workflow_dispatch:
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Пинг /api/health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Запрос к публичному сайту
+        env:
+          TARGET: ${{ vars.JUSTTLD_URL || 'https://justtld.onrender.com' }}
+        run: |
+          set -o pipefail
+          echo "Пингую $TARGET/api/health"
+          code=$(curl -sS -m 120 -o health.json -w '%{http_code}' "$TARGET/api/health" || true)
+          total=$(curl -sS -m 120 -o /dev/null -w '%{time_total}' "$TARGET/api/health" 2>/dev/null || echo "?")
+          echo "HTTP $code (около ${total}s)"
+          cat health.json 2>/dev/null | head -c 1200; echo
+          status=$(python3 -c "import json;print(json.load(open('health.json')).get('status','?'))" 2>/dev/null || echo '?')
+          age=$(python3 -c "import json;print(json.load(open('health.json')).get('keepAlive',{}).get('ageSeconds','нет данных'))" 2>/dev/null || echo '?')
+          echo "status=$status · keep-alive: последний пинг был ${age}s назад"
+          if [ "$code" != "200" ]; then
+            echo "::warning::Сайт ответил $code"
+            exit 0
+          fi
