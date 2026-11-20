@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+.next
+**/.next
+data
+logs
+.git
+.github
+coverage
+*.log
+.env
+.env.*
+!.env.example
+deployments/*.local.json
+docs

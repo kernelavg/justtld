@@ -1,0 +1,22 @@
+{
+  "name": "@justtld/indexer",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "once": "tsx src/main.ts --once",
+    "resync": "tsx src/main.ts --resync",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@justtld/db": "*",
+    "@justtld/shared": "*",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1",
+    "viem": "^2.21.54"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10"
+  }
+}

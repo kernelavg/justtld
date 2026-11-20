@@ -1,0 +1,91 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chain-db-indexer:
+    name: Реальная сеть + PostgreSQL + indexer + API/UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: justtld
+          POSTGRES_PASSWORD: justtld
+          POSTGRES_DB: justtld
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U justtld -d justtld"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://justtld:justtld@127.0.0.1:5432/justtld
+      RPC_URL: http://127.0.0.1:8545
+      NEXT_PUBLIC_RPC_URL: http://127.0.0.1:8545
+      NEXT_PUBLIC_CHAIN_ID: '31337'
+      SESSION_SECRET: ci-session-secret-ci-session-secret-32
+      NEXT_PUBLIC_ENABLE_DEV_WALLET: 'true'
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: cp .env.example .env
+
+      - name: Запуск локальной EVM-сети
+        run: |
+          npx hardhat node --hostname 0.0.0.0 --port 8545 > logs-chain.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -s -X POST -H 'content-type: application/json' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+              http://127.0.0.1:8545 > /dev/null; then echo "сеть готова"; break; fi
+            sleep 1
+          done
+
+      - name: Деплой контракта
+        run: npm run deploy
+
+      - name: Миграции БД
+        run: npm run db:migrate
+
+      - name: Тесты indexer (реальные события → PostgreSQL)
+        run: npm run test:integration
+
+      - name: Запуск indexer в фоне (для API-тестов истории)
+        run: |
+          npm run indexer > logs-indexer.log 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q "индексатор запущен" logs-indexer.log 2>/dev/null; then break; fi
+            sleep 1
+          done
+          tail -5 logs-indexer.log
+
+      - name: Тесты API и UI (реальные запросы к сети и БД)
+        run: npm run test:ui
+
+      - name: 'Сквозной сценарий: 19 шагов — регистрация, transfer, renew, admin'
+        run: npm run verify:e2e
+
+      - name: Логи при падении
+        if: failure()
+        run: |
+          echo '── indexer ──'; tail -50 logs-indexer.log || true
+          echo '── chain ──'; tail -50 logs-chain.log || true

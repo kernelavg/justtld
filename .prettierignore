@@ -1,0 +1,16 @@
+node_modules
+.next
+artifacts
+cache
+data
+logs
+coverage
+package-lock.json
+*.md
+packages/shared/src/generated
+apps/web/next-env.d.ts
+deployments
+.env
+.env.*
+Dockerfile
+.dockerignore

@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# local chain & deployments
+data/
+logs/
+cache/
+artifacts/
+typechain-types/
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.log
+.env.secrets
+.env.*.local

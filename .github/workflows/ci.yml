@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Линт · типы · юнит-тесты · сборка
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Подготовка .env
+        run: cp .env.example .env
+
+      - name: Prettier
+        run: npm run format:check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript (strict)
+        run: npm run typecheck
+
+      - name: Тесты контракта (Hardhat)
+        run: npm run test:contracts
+
+      - name: Юнит-тесты shared (валидация TLD, схемы)
+        run: npm run test:shared
+
+      - name: Сборка Next.js
+        run: npm run build
