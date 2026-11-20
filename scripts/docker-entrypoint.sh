@@ -16,10 +16,10 @@ if [ "${RUN_INDEXER_IN_WEB:-false}" = "true" ]; then
 fi
 
 # Keep-alive: пинг собственного публичного адреса, чтобы бесплатный инстанс не засыпал.
-if [ "${KEEP_ALIVE_ENABLED:-false}" = "true" ]; then
-  echo "[entrypoint] keep-alive включён (интервал ${KEEP_ALIVE_INTERVAL_SECONDS:-870} с)"
-  node scripts/keep-alive.mjs &
-fi
+# Скрипт сам решает, нужен ли он (по RENDER_EXTERNAL_URL / KEEP_ALIVE_ENABLED) и сам завершается,
+# если пинговать нечего или он отключён явно.
+echo "[entrypoint] keep-alive: запускаю проверку условий"
+node scripts/keep-alive.mjs &
 
 echo "[entrypoint] запуск: $*"
 exec "$@"

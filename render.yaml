@@ -50,7 +50,7 @@ services:
         value: '12177490'
       # ── не засыпать на бесплатном тарифе ──
       - key: KEEP_ALIVE_ENABLED
-        value: 'true'
+        value: 'auto'
       - key: KEEP_ALIVE_INTERVAL_SECONDS
         value: '870'
       # ── обозреватель ──

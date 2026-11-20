@@ -14,7 +14,8 @@
 import fs from 'node:fs';
 import process from 'node:process';
 
-const enabled = (process.env.KEEP_ALIVE_ENABLED ?? 'false').toLowerCase() === 'true';
+const flag = (process.env.KEEP_ALIVE_ENABLED ?? 'auto').toLowerCase();
+const enabled = flag === 'true' || (flag !== 'false' && Boolean(process.env.RENDER_EXTERNAL_URL));
 const intervalSeconds = Number.parseInt(process.env.KEEP_ALIVE_INTERVAL_SECONDS ?? '870', 10);
 const baseUrl = (process.env.KEEP_ALIVE_URL ?? process.env.RENDER_EXTERNAL_URL ?? '').replace(
   /\/+$/,
@@ -22,7 +23,7 @@ const baseUrl = (process.env.KEEP_ALIVE_URL ?? process.env.RENDER_EXTERNAL_URL ?
 );
 
 if (!enabled) {
-  console.log('[keep-alive] выключен (KEEP_ALIVE_ENABLED != true)');
+  console.log('[keep-alive] выключен: нет RENDER_EXTERNAL_URL или KEEP_ALIVE_ENABLED=false');
   process.exit(0);
 }
 
