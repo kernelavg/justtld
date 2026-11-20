@@ -8,6 +8,7 @@
 > | Контракт | `0x040e0F550dE73Aa796131A3C503B0189303CB298` (блок деплоя 12177490) |
 > | Владелец / админ | `0x2ba51777889785cC53871463Bf8e4db95Fc8d886` (burner, ключ импортирован в MetaMask) |
 > | Публичная страница | https://justtld.infinityfreeapp.com (статика, без сервера) |
+> | Публичный сайт | https://justtld.onrender.com (Render + Neon, индексер в контейнере, лаг 2–3 блока) |
 > | Etherscan | https://sepolia.etherscan.io/address/0x040e0F550dE73Aa796131A3C503B0189303CB298#code — **Source Code Verified** |
 > | Sourcify | https://repo.sourcify.dev/contracts/11155111/0x040e0F550dE73Aa796131A3C503B0189303CB298 — `exact_match` (creation + runtime) |
 > | Проверка исходников | `npm run verify:sepolia` (Etherscan + Sourcify, идемпотентно) |

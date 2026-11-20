@@ -12,6 +12,7 @@
 > | Контракт | [`0x040e0F550dE73Aa796131A3C503B0189303CB298`](https://sepolia.etherscan.io/address/0x040e0F550dE73Aa796131A3C503B0189303CB298#code) — Source Code Verified |
 > | Владелец / админ | [`0x2ba51777889785cC53871463Bf8e4db95Fc8d886`](https://sepolia.etherscan.io/address/0x2ba51777889785cC53871463Bf8e4db95Fc8d886) |
 > | Sourcify | [exact_match](https://repo.sourcify.dev/contracts/11155111/0x040e0F550dE73Aa796131A3C503B0189303CB298) (creation + runtime) |
+> | Публичный сайт (PaaS) | **https://justtld.onrender.com** — Next.js + PostgreSQL (Neon) + indexer в одном контейнере |
 > | Публичная страница | https://justtld.infinityfreeapp.com — статика без сервера, регистрация зон из браузера |
 > | Деплой / проверка | `npm run deploy:sepolia`, `npm run verify:sepolia` |
 >
