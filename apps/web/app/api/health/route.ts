@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { APP_VERSION, type HealthDto } from '@justtld/shared';
 import { getCheckpoint, pingDatabase } from '@justtld/db';
 import { jsonResponse, route } from '@/lib/server/http';
@@ -5,6 +6,21 @@ import { getChainHead, getContractCodeInfo, pingChain } from '@/lib/server/chain
 import { adminAddress, chainId, deployment } from '@/lib/server/config';
 
 export const dynamic = 'force-dynamic';
+
+/** Состояние keep-alive (файл-сердцебиение пишет scripts/keep-alive.mjs). */
+function readKeepAlive(): Record<string, unknown> | null {
+  const file = process.env.KEEP_ALIVE_HEARTBEAT_FILE ?? '/tmp/justtld-keep-alive.json';
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    const lastPingAt = typeof raw.lastPingAt === 'string' ? raw.lastPingAt : null;
+    return {
+      ...raw,
+      ageSeconds: lastPingAt ? Math.round((Date.now() - Date.parse(lastPingAt)) / 1000) : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const GET = route(
   async () => {
@@ -59,6 +75,7 @@ export const GET = route(
           contract: deployment()?.address ?? null,
           abiHash: deployment()?.abiHash ?? null,
         },
+        keepAlive: readKeepAlive(),
       },
       { status },
     );

@@ -11,6 +11,7 @@
  *   KEEP_ALIVE_INTERVAL_SECONDS=870  14 мин 30 с
  *   KEEP_ALIVE_URL=<адрес>           по умолчанию RENDER_EXTERNAL_URL, иначе локальный /api/health
  */
+import fs from 'node:fs';
 import process from 'node:process';
 
 const enabled = (process.env.KEEP_ALIVE_ENABLED ?? 'false').toLowerCase() === 'true';
@@ -32,6 +33,28 @@ if (!baseUrl) {
 
 const intervalMs = Math.max(60, intervalSeconds) * 1000;
 const target = `${baseUrl}/api/health`;
+const heartbeatFile = process.env.KEEP_ALIVE_HEARTBEAT_FILE ?? '/tmp/justtld-keep-alive.json';
+
+const heartbeat = {
+  enabled: true,
+  target,
+  intervalSeconds: Math.round(intervalMs / 1000),
+  startedAt: new Date().toISOString(),
+  lastPingAt: null,
+  lastStatus: null,
+  lastLatencyMs: null,
+  lastError: null,
+  pings: 0,
+  failures: 0,
+};
+
+function writeHeartbeat() {
+  try {
+    fs.writeFileSync(heartbeatFile, JSON.stringify(heartbeat));
+  } catch {
+    // файл — только для диагностики через /api/health, его отсутствие не критично
+  }
+}
 
 function stamp() {
   return new Date().toISOString().slice(11, 19);
@@ -54,9 +77,21 @@ async function ping() {
       }
     }
     console.log(`[keep-alive ${stamp()}] ${target} → ${summary} за ${latency} мс`);
+    heartbeat.lastPingAt = new Date().toISOString();
+    heartbeat.lastStatus = response.status;
+    heartbeat.lastLatencyMs = latency;
+    heartbeat.lastError = null;
+    heartbeat.pings += 1;
+    if (!response.ok) heartbeat.failures += 1;
+    writeHeartbeat();
     return response.ok;
   } catch (error) {
     console.log(`[keep-alive ${stamp()}] ${target} → ошибка: ${error?.message ?? error}`);
+    heartbeat.lastPingAt = new Date().toISOString();
+    heartbeat.lastStatus = null;
+    heartbeat.lastError = String(error?.message ?? error);
+    heartbeat.failures += 1;
+    writeHeartbeat();
     return false;
   }
 }
@@ -65,6 +100,8 @@ console.log(
   `[keep-alive] включён: ${target}, интервал ${Math.round(intervalMs / 1000)} с ` +
     `(${(intervalMs / 60000) | 0 ? `${(intervalMs / 60000).toFixed(1)} мин` : 'меньше минуты'})`,
 );
+
+writeHeartbeat();
 
 for (;;) {
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
