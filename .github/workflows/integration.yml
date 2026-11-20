@@ -51,14 +51,18 @@ jobs:
       - run: cp .env.example .env
 
       - name: Запуск локальной EVM-сети
+        working-directory: contracts
         run: |
-          npx hardhat node --hostname 0.0.0.0 --port 8545 > logs-chain.log 2>&1 &
+          npx hardhat node --hostname 0.0.0.0 --port 8545 > ../logs-chain.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -s -X POST -H 'content-type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
               http://127.0.0.1:8545 > /dev/null; then echo "сеть готова"; break; fi
             sleep 1
           done
+          curl -s -X POST -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+            http://127.0.0.1:8545
 
       - name: Деплой контракта
         run: npm run deploy
