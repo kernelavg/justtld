@@ -48,6 +48,11 @@ services:
         value: '3000'
       - key: INDEXER_START_BLOCK
         value: '12177490'
+      # ── не засыпать на бесплатном тарифе ──
+      - key: KEEP_ALIVE_ENABLED
+        value: 'true'
+      - key: KEEP_ALIVE_INTERVAL_SECONDS
+        value: '870'
       # ── обозреватель ──
       - key: EXPLORER_TX_URL_TEMPLATE
         value: https://sepolia.etherscan.io/tx/{hash}
