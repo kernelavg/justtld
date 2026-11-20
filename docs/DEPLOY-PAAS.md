@@ -69,6 +69,22 @@ npm run verify:sepolia     # Etherscan (API-ключ из .env.secrets) + Sourci
 Адрес, владелец и аргументы конструктора берутся из `deployments/sepolia.json`, поэтому повторная
 проверка безопасна: «уже проверен» не считается ошибкой.
 
+## 0.9. Деплой в один клик (Render Blueprint)
+
+Репозиторий публичный: https://github.com/kernelavg/justtld — `render.yaml` уже описывает сервис.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kernelavg/justtld)
+
+Кнопка ведёт на `https://render.com/deploy?repo=https://github.com/kernelavg/justtld`: вход через GitHub →
+Blueprint подставит все переменные, кроме одной — **`DATABASE_URL`** (строка из Neon, шаг 1). Всё остальное
+уже прописано: сеть Sepolia, RPC, `INDEXER_START_BLOCK=12177490` (блок деплоя контракта),
+`ADMIN_ADDRESS=0x2ba5…d886`, `RUN_INDEXER_IN_WEB=true`, `PGSSLMODE=require`, `SESSION_SECRET`
+генерируется Render'ом.
+
+После первого деплоя: `https://justtld.onrender.com/api/health` должен вернуть `status: ok`,
+`chainId: 11155111`. Если Render выдал другое имя сервиса — поправьте `NEXT_PUBLIC_APP_URL`
+в панели и пересоберите (эта переменная вшивается в бандл при сборке).
+
 ## 1. База данных: Neon (5 минут, бесплатно)
 
 1. https://neon.com → **Sign up** (можно через GitHub/Google).

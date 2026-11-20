@@ -28,7 +28,7 @@ services:
       - key: NEXT_PUBLIC_ENABLE_DEV_WALLET
         value: 'false'
       - key: NEXT_PUBLIC_APP_URL
-        sync: false
+        value: https://justtld.onrender.com
       # ── база ──
       - key: DATABASE_URL
         sync: false
@@ -38,7 +38,7 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: ADMIN_ADDRESS
-        sync: false
+        value: '0x2ba51777889785cC53871463Bf8e4db95Fc8d886'
       # ── indexer в том же контейнере (бесплатный тариф) ──
       - key: RUN_INDEXER_IN_WEB
         value: 'true'
@@ -47,7 +47,7 @@ services:
       - key: INDEXER_POLL_INTERVAL_MS
         value: '3000'
       - key: INDEXER_START_BLOCK
-        sync: false
+        value: '12177490'
       # ── обозреватель ──
       - key: EXPLORER_TX_URL_TEMPLATE
         value: https://sepolia.etherscan.io/tx/{hash}
