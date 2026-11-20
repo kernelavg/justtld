@@ -85,6 +85,16 @@ jobs:
       - name: Тесты API и UI (реальные запросы к сети и БД)
         run: npm run test:ui
 
+      - name: Сборка и запуск веб-приложения
+        run: |
+          npm run build > logs-build.log 2>&1 || { tail -40 logs-build.log; exit 1; }
+          npm run start > logs-web.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3000/api/health > /dev/null; then echo "приложение готово"; break; fi
+            sleep 2
+          done
+          curl -s http://127.0.0.1:3000/api/health
+
       - name: 'Сквозной сценарий: 19 шагов — регистрация, transfer, renew, admin'
         run: npm run verify:e2e
 
@@ -92,4 +102,5 @@ jobs:
         if: failure()
         run: |
           echo '── indexer ──'; tail -50 logs-indexer.log || true
+          echo '── web ──'; tail -50 logs-web.log || true
           echo '── chain ──'; tail -50 logs-chain.log || true
