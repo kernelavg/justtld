@@ -67,134 +67,156 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* Hero */}
+      {/* Hero: на мобилке центрированный, на десктопе — полноценный 2-колоночный макет */}
       <section className="relative overflow-hidden gradient-hero">
-        <div className="container py-20 md:py-28">
-          <div className="mx-auto max-w-2xl text-center">
-            <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              <span>{t('home.badge')}</span>
-            </div>
+        <div className="container py-14 md:py-20 lg:py-24">
+          <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-10">
+            {/* Левая колонка: оффер, поиск и кнопки */}
+            <div className="mx-auto max-w-xl text-center lg:col-span-6 lg:mx-0 lg:text-left">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <span>{t('home.badge')}</span>
+              </div>
 
-            <h1 className="title-gradient text-4xl font-semibold tracking-tight sm:text-5xl md:text-[56px] md:leading-[1.06]">
-              Твоё пространство в сети.{' '}
-              <span className="brand-text-gradient">За одну минуту.</span>
-            </h1>
+              <h1 className="title-gradient text-4xl font-semibold tracking-tight sm:text-5xl lg:text-[52px] lg:leading-[1.06]">
+                Твоё пространство в сети.{' '}
+                <span className="brand-text-gradient">За минуту.</span>
+              </h1>
 
-            <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-muted-foreground sm:text-base">
-              {t('home.subtitle')}
-            </p>
+              <p className="mt-5 text-[15px] leading-relaxed text-muted-foreground sm:text-base lg:max-w-lg">
+                {t('home.subtitle')}
+              </p>
 
-            {/* Поиск зоны */}
-            <form
-              onSubmit={check}
-              className="mx-auto mt-8 flex max-w-md items-center gap-1.5 rounded-full border border-border/90 bg-card/85 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors focus-within:border-primary/50"
-            >
-              <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setAvailability(null);
-                }}
-                placeholder={t('home.searchPlaceholder')}
-                className="mono h-9 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
-                aria-label={t('home.searchPlaceholder')}
-              />
-              <Button
-                type="submit"
-                size="sm"
-                disabled={checking}
-                className="h-8 shrink-0 rounded-full px-4"
+              <form
+                onSubmit={check}
+                className="mx-auto mt-8 flex max-w-md items-center gap-1.5 rounded-full border border-border/90 bg-card/85 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors focus-within:border-primary/50 lg:mx-0"
               >
-                {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('home.check')}
-              </Button>
-            </form>
+                <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setAvailability(null);
+                  }}
+                  placeholder={t('home.searchPlaceholder')}
+                  className="mono h-9 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+                  aria-label={t('home.searchPlaceholder')}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={checking}
+                  className="h-8 shrink-0 rounded-full px-4"
+                >
+                  {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('home.check')}
+                </Button>
+              </form>
 
-            {availability && (
-              <div className="mx-auto mt-3 max-w-md text-left">
-                {availability.available ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-success/30 bg-success/10 px-4 py-2.5 text-xs text-success">
-                    <span className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
-                      <span className="mono font-medium">{availability.tld}</span> —{' '}
-                      {t('home.available')}
-                    </span>
-                    <div className="flex items-center gap-1.5">
+              {availability && (
+                <div className="mx-auto mt-3 max-w-md text-left lg:mx-0">
+                  {availability.available ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-success/30 bg-success/10 px-4 py-2.5 text-xs text-success">
+                      <span className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                        <span className="mono font-medium">{availability.tld}</span> —{' '}
+                        {t('home.available')}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button asChild size="sm" variant="outline" className="h-7 rounded-full px-3">
+                          <Link href={`/register?tld=${encodeURIComponent(availability.tld)}`}>
+                            В блокчейне
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" variant="success" className="h-7 rounded-full px-3">
+                          <Link href="/store">Купить</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
+                      <span className="flex items-center gap-2">
+                        <CircleAlert className="h-4 w-4 shrink-0" />
+                        <span className="mono font-medium">{availability.tld}</span> —{' '}
+                        {describeReason(availability.reason, language)}
+                      </span>
                       <Button asChild size="sm" variant="outline" className="h-7 rounded-full px-3">
-                        <Link href={`/register?tld=${encodeURIComponent(availability.tld)}`}>
-                          В блокчейне
-                        </Link>
-                      </Button>
-                      <Button asChild size="sm" variant="success" className="h-7 rounded-full px-3">
-                        <Link href="/store">Купить</Link>
+                        <Link href={`/zone/${availability.tld}`}>{t('common.openZone')}</Link>
                       </Button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
-                    <span className="flex items-center gap-2">
-                      <CircleAlert className="h-4 w-4 shrink-0" />
-                      <span className="mono font-medium">{availability.tld}</span> —{' '}
-                      {describeReason(availability.reason, language)}
-                    </span>
-                    <Button asChild size="sm" variant="outline" className="h-7 rounded-full px-3">
-                      <Link href={`/zone/${availability.tld}`}>{t('common.openZone')}</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-            {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
-              <Button asChild size="lg" className="rounded-full px-6">
-                <Link href="/store">
-                  Открыть магазин <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-full px-6">
-                <Link href="/zones">{t('home.ctaExplore')}</Link>
-              </Button>
-            </div>
-          </div>
-
-          {/* Живое минималистичное превью окна — в стиле нового логотипа */}
-          <div className="mx-auto mt-14 max-w-2xl">
-            <div className="overflow-hidden rounded-2xl border border-border/75 bg-card/60 shadow-2xl shadow-black/25 backdrop-blur-xl">
-              <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                  )}
                 </div>
-                <div className="mono flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[11px] text-muted-foreground">
-                  <Lock className="h-3 w-3 text-success" />
-                  <span>
-                    https://<span className="text-foreground">{previewZone || 'brand'}</span>
-                    .justtld.online
+              )}
+              {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
+                <Button asChild size="lg" className="rounded-full px-6">
+                  <Link href="/store">
+                    Открыть магазин <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="rounded-full px-6">
+                  <Link href="/zones">{t('home.ctaExplore')}</Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Правая колонка: живое превью окна браузера (на десктопе справа, на мобилке снизу) */}
+            <div className="mx-auto w-full max-w-xl lg:col-span-6 lg:max-w-none">
+              <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/65 shadow-2xl shadow-black/30 backdrop-blur-xl">
+                <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                  </div>
+                  <div className="mono flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
+                    <Lock className="h-3 w-3 text-success" />
+                    <span>
+                      https://<span className="text-foreground">{previewZone || 'brand'}</span>
+                      .justtld.online
+                    </span>
+                  </div>
+                  <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    HTTPS
                   </span>
                 </div>
-                <span className="text-[11px] text-muted-foreground">SSL</span>
-              </div>
 
-              <div className="grid gap-4 p-6 sm:grid-cols-3 sm:divide-x sm:divide-border/50">
-                <div className="space-y-1 sm:pr-4">
-                  <div className="text-xs text-muted-foreground">Всего зон</div>
-                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
-                    {stats.data ? formatNumber(stats.data.total, language) : '—'}
+                <div className="space-y-5 p-6">
+                  <div className="grid grid-cols-3 divide-x divide-border/50">
+                    <div className="pr-3">
+                      <div className="text-[11px] text-muted-foreground">Всего зон</div>
+                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                        {stats.data ? formatNumber(stats.data.total, language) : '—'}
+                      </div>
+                    </div>
+                    <div className="px-4">
+                      <div className="text-[11px] text-muted-foreground">Активных</div>
+                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                        {stats.data ? formatNumber(stats.data.active, language) : '—'}
+                      </div>
+                    </div>
+                    <div className="pl-4">
+                      <div className="text-[11px] text-muted-foreground">Владельцев</div>
+                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                        {stats.data ? formatNumber(stats.data.uniqueOwners, language) : '—'}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1 sm:px-4">
-                  <div className="text-xs text-muted-foreground">Активных сайтов</div>
-                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
-                    {stats.data ? formatNumber(stats.data.active, language) : '—'}
-                  </div>
-                </div>
-                <div className="space-y-1 sm:pl-4">
-                  <div className="text-xs text-muted-foreground">Владельцев</div>
-                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
-                    {stats.data ? formatNumber(stats.data.uniqueOwners, language) : '—'}
+
+                  <div className="space-y-2 border-t border-border/50 pt-4 text-xs">
+                    {[
+                      { host: `${previewZone || 'brand'}.justtld.online`, tag: 'Основной сайт' },
+                      { host: `app.${previewZone || 'brand'}.justtld.online`, tag: 'Поддомен' },
+                      { host: `dns.${previewZone || 'brand'}.justtld.online`, tag: 'A / CNAME / TXT' },
+                    ].map((row) => (
+                      <div
+                        key={row.host}
+                        className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 px-3 py-2"
+                      >
+                        <span className="mono text-foreground/90">{row.host}</span>
+                        <span className="text-[11px] text-muted-foreground">{row.tag}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -203,7 +225,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Чистая 3-колоночная сетка без лишних рамок */}
+      {/* Чистая 3-колоночная сетка */}
       <section className="border-y border-border/50 bg-card/20">
         <div className="container grid divide-y divide-border/50 md:grid-cols-3 md:divide-x md:divide-y-0">
           {[

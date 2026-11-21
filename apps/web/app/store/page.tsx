@@ -220,7 +220,7 @@ export default function StorePage() {
   const customUsdt = catalog ? Number(catalog.pricing.customZonePriceUsdt.toFixed(2)) : 0;
 
   return (
-    <div className="container max-w-5xl space-y-8 py-10">
+    <div className="container max-w-6xl space-y-8 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border/50 pb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Магазин зон</h1>

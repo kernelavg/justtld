@@ -75,18 +75,18 @@ export function SiteHeader() {
   );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/75 backdrop-blur-xl">
-      <div className="container flex h-14 items-center justify-between gap-2 sm:gap-4">
-        <div className="flex min-w-0 items-center gap-6">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+      <div className="container flex h-14 items-center justify-between gap-3">
+        <div className="flex shrink-0 items-center gap-7">
           <Link href="/" className="group flex shrink-0 items-center gap-2.5">
             <img
               src="/brand/icon.png"
               alt="JustTLD"
               width={28}
               height={28}
-              className="h-7 w-7 rounded-[6px] ring-1 ring-white/15 transition-transform duration-150 group-hover:scale-[1.03]"
+              className="h-7 w-7 shrink-0 rounded-[6px] ring-1 ring-white/15 transition-transform duration-150 group-hover:scale-[1.03]"
             />
-            <span className="text-[15px] font-semibold tracking-tight">
+            <span className="whitespace-nowrap text-[15px] font-semibold tracking-tight">
               Just<span className="brand-text-gradient">TLD</span>
             </span>
           </Link>
@@ -100,9 +100,9 @@ export function SiteHeader() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'rounded-md px-2.5 py-1.5 text-[13px] transition-colors',
+                    'rounded-md px-3 py-1.5 text-[13px] transition-colors',
                     active
-                      ? 'font-medium text-foreground'
+                      ? 'bg-secondary/80 font-medium text-foreground'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -113,11 +113,12 @@ export function SiteHeader() {
           </nav>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Язык и тема на десктопе/планшете; на телефоне перенесены внутрь бургер-меню, чтобы не теснить логотип */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1 px-2 text-[11px] font-medium uppercase"
+            className="hidden h-8 gap-1.5 px-2.5 text-[11px] font-medium uppercase sm:inline-flex"
             aria-label={t('common.language')}
             onClick={() => setLanguage(language === 'ru' ? 'en' : 'ru')}
             title={language === 'ru' ? 'Switch to English' : 'Переключить на русский'}
@@ -129,6 +130,7 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             size="icon"
+            className="hidden sm:inline-flex"
             aria-label={t('common.theme')}
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
           >
@@ -139,11 +141,11 @@ export function SiteHeader() {
             )}
           </Button>
 
-          <div className="ml-1 hidden sm:block">
+          <div className="hidden sm:block">
             <ConnectWallet />
           </div>
 
-          <div className="ml-1 sm:hidden">
+          <div className="sm:hidden">
             <ConnectWallet compact />
           </div>
 
@@ -161,7 +163,7 @@ export function SiteHeader() {
 
       {mobileOpen && (
         <div className="border-t border-border/50 bg-background/95 backdrop-blur-xl md:hidden">
-          <nav className="container flex flex-col gap-0.5 py-2.5">
+          <nav className="container flex flex-col gap-0.5 py-3">
             <Link
               href="/"
               onClick={() => setMobileOpen(false)}
@@ -187,6 +189,34 @@ export function SiteHeader() {
                 {t(item.key)}
               </Link>
             ))}
+
+            <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-3 sm:hidden">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs uppercase"
+                onClick={() => setLanguage(language === 'ru' ? 'en' : 'ru')}
+              >
+                <Globe className="h-3.5 w-3.5" />
+                {language === 'ru' ? 'Русский (RU)' : 'English (EN)'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 gap-1.5 text-xs"
+                onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              >
+                {mounted && resolvedTheme === 'dark' ? (
+                  <>
+                    <Sun className="h-3.5 w-3.5" /> Светлая
+                  </>
+                ) : (
+                  <>
+                    <Moon className="h-3.5 w-3.5" /> Тёмная
+                  </>
+                )}
+              </Button>
+            </div>
           </nav>
         </div>
       )}
