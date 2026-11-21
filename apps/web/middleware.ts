@@ -12,6 +12,7 @@ const RESERVED_PATHS = new Set([
   'address',
   'admin',
   'api',
+  'auctions',
   'block',
   'dashboard',
   'docs',
