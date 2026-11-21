@@ -27,6 +27,8 @@ services:
         value: Sepolia Testnet
       - key: NEXT_PUBLIC_ENABLE_DEV_WALLET
         value: 'false'
+      - key: NEXT_PUBLIC_WC_PROJECT_ID
+        value: '055cff572497d6ab387c7d49e3288026'
       - key: NEXT_PUBLIC_APP_URL
         value: https://justtld.onrender.com
       # ── база ──

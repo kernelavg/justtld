@@ -88,6 +88,11 @@ export function SiteHeader() {
             <ConnectWallet />
           </div>
 
+          {/* На телефоне подпись не помещается — оставляем иконку, чтобы подключение было в один тап. */}
+          <div className="sm:hidden">
+            <ConnectWallet compact />
+          </div>
+
           <Button
             variant="ghost"
             size="icon"

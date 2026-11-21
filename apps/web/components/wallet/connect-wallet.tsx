@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown, Copy, LogOut, Wallet, FlaskConical } from 'lucide-react';
+import { ChevronDown, Copy, LogOut, Wallet, FlaskConical, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { shortenAddress } from '@justtld/shared';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,14 @@ import { useWallet } from '@/lib/wallet';
 import { getDevWallets, type DevWalletAccount } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-export function ConnectWallet({ className }: { className?: string }) {
+export function ConnectWallet({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  /** Только иконка — для узких экранов, где подпись не помещается. */
+  compact?: boolean;
+}) {
   const { t } = useI18n();
   const wallet = useWallet();
   const [open, setOpen] = React.useState(false);
@@ -47,13 +54,19 @@ export function ConnectWallet({ className }: { className?: string }) {
   if (wallet.status === 'connected' && wallet.address) {
     return (
       <div className={cn('flex items-center gap-1', className)}>
-        <Button variant="outline" size="sm" onClick={copyAddress} className="mono gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={copyAddress}
+          className={cn('mono gap-2', compact && 'px-2')}
+          aria-label={wallet.address}
+        >
           <span
             className={cn('h-2 w-2 rounded-full', wallet.error ? 'bg-warning' : 'bg-success')}
           />
-          {shortenAddress(wallet.address)}
+          {compact ? null : shortenAddress(wallet.address)}
           {wallet.kind === 'dev' ? <FlaskConical className="h-3 w-3" /> : null}
-          <Copy className="h-3 w-3 opacity-60" />
+          {compact ? null : <Copy className="h-3 w-3 opacity-60" />}
         </Button>
         <Button
           variant="ghost"
@@ -73,11 +86,17 @@ export function ConnectWallet({ className }: { className?: string }) {
         size="sm"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
+        aria-label={compact ? t('common.connectWallet') : undefined}
+        title={compact ? t('common.connectWallet') : undefined}
         disabled={wallet.status === 'connecting'}
       >
         <Wallet className="h-4 w-4" />
-        {wallet.status === 'connecting' ? t('common.loading') : t('common.connectWallet')}
-        <ChevronDown className="h-3 w-3 opacity-70" />
+        {compact
+          ? null
+          : wallet.status === 'connecting'
+            ? t('common.loading')
+            : t('common.connectWallet')}
+        {compact ? null : <ChevronDown className="h-3 w-3 opacity-70" />}
       </Button>
 
       {open && (
@@ -95,6 +114,24 @@ export function ConnectWallet({ className }: { className?: string }) {
               {wallet.hasInjected ? 'MetaMask / Rabby / Coinbase' : t('common.noWallet')}
             </span>
           </button>
+
+          {wallet.hasWalletConnect && (
+            <button
+              type="button"
+              className="flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+              onClick={async () => {
+                setOpen(false);
+                await wallet.connectWalletConnect();
+              }}
+            >
+              <span className="flex items-center gap-1 font-medium">
+                <Smartphone className="h-3.5 w-3.5" /> MetaMask на телефоне
+              </span>
+              <span className="text-xs text-muted-foreground">
+                WalletConnect: QR-код или открыть приложение
+              </span>
+            </button>
+          )}
 
           {devEnabled && (
             <button
@@ -116,7 +153,11 @@ export function ConnectWallet({ className }: { className?: string }) {
 
           {wallet.error && (
             <p className="px-3 py-2 text-xs text-destructive">
-              {wallet.error === 'NO_INJECTED_WALLET' ? t('common.noWallet') : wallet.error}
+              {wallet.error === 'NO_INJECTED_WALLET'
+                ? t('common.noWallet')
+                : wallet.error === 'CONNECTION_CANCELLED'
+                  ? 'Подключение отменено'
+                  : wallet.error}
             </p>
           )}
         </div>

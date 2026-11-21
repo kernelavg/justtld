@@ -13,6 +13,11 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import type { UnsignedTx } from '@justtld/shared';
 import { getDevWallets } from './api';
+import {
+  getWalletConnectProvider,
+  resetWalletConnectProvider,
+  walletConnectEnabled,
+} from './walletconnect';
 
 export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 31337);
 
@@ -29,7 +34,7 @@ export const justtldChain = defineChain({
   testnet: true,
 });
 
-export type WalletKind = 'injected' | 'dev';
+export type WalletKind = 'injected' | 'dev' | 'walletconnect';
 export type WalletStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export type WalletState = {
@@ -44,7 +49,9 @@ export type WalletState = {
 type WalletContextValue = WalletState & {
   publicClient: PublicClient;
   hasInjected: boolean;
+  hasWalletConnect: boolean;
   connectInjected: () => Promise<void>;
+  connectWalletConnect: () => Promise<void>;
   connectDev: (index: number) => Promise<void>;
   disconnect: () => void;
   sendTransaction: (tx: UnsignedTx) => Promise<Hex>;
@@ -59,6 +66,11 @@ type Eip1193Provider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on?: (event: string, handler: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, handler: (...args: unknown[]) => void) => void;
+  /** есть у WalletConnect-провайдера, у window.ethereum — нет */
+  disconnect?: () => Promise<void>;
+  connect?: () => Promise<void>;
+  accounts?: string[];
+  chainId?: number;
 };
 
 function getInjectedProvider(): Eip1193Provider | null {
@@ -86,9 +98,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   });
   const [hasInjected, setHasInjected] = React.useState(false);
   const devAccountRef = React.useRef<ReturnType<typeof privateKeyToAccount> | null>(null);
+  const wcProviderRef = React.useRef<Eip1193Provider | null>(null);
+
+  /** Провайдер активного подключения: injected — из окна, WalletConnect — сессионный. */
+  const activeProvider = React.useCallback((): Eip1193Provider | null => {
+    if (wcProviderRef.current) return wcProviderRef.current;
+    return getInjectedProvider();
+  }, []);
 
   const ensureChain = React.useCallback(async () => {
-    const provider = getInjectedProvider();
+    const provider = activeProvider();
     if (!provider) return;
     const current = (await provider.request({ method: 'eth_chainId' })) as string;
     if (Number.parseInt(current, 16) === CHAIN_ID) return;
@@ -110,7 +129,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         ],
       });
     }
-  }, []);
+  }, [activeProvider]);
 
   const connectInjected = React.useCallback(async () => {
     const provider = getInjectedProvider();
@@ -152,6 +171,79 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [ensureChain]);
 
+  const connectWalletConnect = React.useCallback(async () => {
+    setState((prev) => ({ ...prev, status: 'connecting', error: null }));
+    try {
+      const provider = await getWalletConnectProvider(CHAIN_ID);
+      wcProviderRef.current = provider;
+      provider.on?.('accountsChanged', (accounts) => {
+        const next = (accounts as string[])?.[0];
+        if (!next) {
+          window.localStorage.removeItem(STORAGE_KEY);
+          setState({
+            status: 'disconnected',
+            address: null,
+            kind: null,
+            label: null,
+            chainId: null,
+            error: null,
+          });
+          return;
+        }
+        setState((prev) => ({ ...prev, address: next as `0x${string}` }));
+      });
+      provider.on?.('disconnect', () => {
+        wcProviderRef.current = null;
+        resetWalletConnectProvider();
+        window.localStorage.removeItem(STORAGE_KEY);
+        setState({
+          status: 'disconnected',
+          address: null,
+          kind: null,
+          label: null,
+          chainId: null,
+          error: null,
+        });
+      });
+
+      // WalletConnect требует явного connect(): он показывает QR/диплинк и ждёт подтверждения.
+      if (!provider.session) {
+        if (!provider.connect)
+          throw new Error('WalletConnect: провайдер не поддерживает connect()');
+        await provider.connect();
+      }
+      const accounts = provider.accounts?.length
+        ? provider.accounts
+        : ((await provider.request({ method: 'eth_accounts' })) as string[]);
+      const address = accounts[0] as `0x${string}` | undefined;
+      if (!address) throw new Error('Кошелёк не вернул адрес');
+      const chainHex = (await provider.request({ method: 'eth_chainId' })) as string;
+      const chainId = Number.parseInt(chainHex, 16);
+      devAccountRef.current = null;
+      setState({
+        status: 'connected',
+        address,
+        kind: 'walletconnect',
+        label: 'WalletConnect',
+        chainId,
+        error: chainId === CHAIN_ID ? null : 'WRONG_NETWORK',
+      });
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ kind: 'walletconnect' }));
+    } catch (error) {
+      wcProviderRef.current = null;
+      const message = (error as Error).message ?? String(error);
+      const rejected = /reject|denied|closed|cancel/i.test(message);
+      setState({
+        status: 'error',
+        address: null,
+        kind: null,
+        label: null,
+        chainId: null,
+        error: rejected ? 'CONNECTION_CANCELLED' : message,
+      });
+    }
+  }, []);
+
   const connectDev = React.useCallback(
     async (index: number) => {
       setState((prev) => ({ ...prev, status: 'connecting', error: null }));
@@ -187,6 +279,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = React.useCallback(() => {
     devAccountRef.current = null;
+    if (wcProviderRef.current) {
+      void wcProviderRef.current.disconnect?.().catch(() => undefined);
+      wcProviderRef.current = null;
+      resetWalletConnectProvider();
+    }
     window.localStorage.removeItem(STORAGE_KEY);
     setState({
       status: 'disconnected',
@@ -218,7 +315,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const provider = getInjectedProvider();
+      const provider = activeProvider();
       if (!provider) throw new Error('NO_INJECTED_WALLET');
       await ensureChain();
       const walletClient = createWalletClient({
@@ -233,7 +330,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         value: BigInt(tx.value ?? '0'),
       });
     },
-    [ensureChain, state.address, state.kind],
+    [activeProvider, ensureChain, state.address, state.kind],
   );
 
   const signMessage = React.useCallback(
@@ -244,12 +341,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (!account) throw new Error('Dev-кошелёк не инициализирован');
         return account.signMessage({ message });
       }
-      const provider = getInjectedProvider();
+      const provider = activeProvider();
       if (!provider) throw new Error('NO_INJECTED_WALLET');
       const walletClient = createWalletClient({ chain: justtldChain, transport: custom(provider) });
       return walletClient.signMessage({ account: state.address, message });
     },
-    [state.address, state.kind],
+    [activeProvider, state.address, state.kind],
   );
 
   // Автоподключение сохранённого кошелька.
@@ -263,6 +360,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         void connectDev(parsed.index);
       } else if (parsed.kind === 'injected' && getInjectedProvider()) {
         void connectInjected();
+      } else if (parsed.kind === 'walletconnect' && walletConnectEnabled()) {
+        void connectWalletConnect();
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -305,7 +404,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       ...state,
       publicClient,
       hasInjected,
+      hasWalletConnect: walletConnectEnabled(),
       connectInjected,
+      connectWalletConnect,
       connectDev,
       disconnect,
       sendTransaction,
@@ -317,6 +418,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       publicClient,
       hasInjected,
       connectInjected,
+      connectWalletConnect,
       connectDev,
       disconnect,
       sendTransaction,

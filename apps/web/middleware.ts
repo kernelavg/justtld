@@ -11,14 +11,30 @@ export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== 'production';
   const response = NextResponse.next();
 
+  // WalletConnect v2: relay идёт по websocket, модалка грузит шрифты и картинку QR с reown.com.
+  const walletConnectSources = [
+    'wss://relay.walletconnect.org',
+    'wss://relay.walletconnect.com',
+    'https://relay.walletconnect.org',
+    'https://relay.walletconnect.com',
+    'https://verify.walletconnect.org',
+    'https://verify.walletconnect.com',
+    'https://rpc.walletconnect.org',
+    'https://rpc.walletconnect.com',
+    'https://api.web3modal.org',
+    'https://api.web3modal.com',
+    'https://fonts.reown.com',
+  ].join(' ');
+
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "font-src 'self' data:",
-    // RPC-прокси и same-origin API; ws — для HMR в режиме разработки.
-    `connect-src 'self' ${isDev ? 'ws: wss: ' : ''}http: https:`,
+    "img-src 'self' data: blob: https:",
+    `font-src 'self' data: https://fonts.reown.com`,
+    // RPC-прокси и same-origin API; ws — для HMR в режиме разработки; walletConnect — relay v2.
+    `connect-src 'self' ${isDev ? 'ws: wss: ' : ''}http: https: ${walletConnectSources}`,
+    'frame-src https://verify.walletconnect.org https://verify.walletconnect.com',
     'frame-ancestors *',
     "base-uri 'self'",
     "form-action 'self'",

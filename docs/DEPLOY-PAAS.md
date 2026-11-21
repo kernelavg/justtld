@@ -85,6 +85,27 @@ Blueprint подставит все переменные, кроме одной 
 `chainId: 11155111`. Если Render выдал другое имя сервиса — поправьте `NEXT_PUBLIC_APP_URL`
 в панели и пересоберите (эта переменная вшивается в бандл при сборке).
 
+## 0.9. Подключение кошелька с телефона: WalletConnect v2
+
+Обычный Chrome/Safari на телефоне не даёт сайту `window.ethereum`, поэтому помимо инъекции
+(расширение MetaMask, Brave, встроенный браузер MetaMask) добавлен WalletConnect:
+
+- пункт меню **«MetaMask на телефоне»** → модальное окно с QR-кодом и кнопкой «Copy link»;
+- на узком экране в шапке появилась отдельная иконочная кнопка кошелька (`compact`), чтобы
+  подключение занимало один тап, а не пряталось в бургер-меню;
+- после подтверждения в кошельке сессия восстанавливается при перезагрузке страницы
+  (`localStorage: justtld.wallet → kind: walletconnect`);
+- CSP расширен: `connect-src wss://relay.walletconnect.org` (relay), `font-src https://fonts.reown.com`,
+  `frame-src https://verify.walletconnect.*` — без этого браузер блокировал сопряжение.
+
+Переменная окружения: `NEXT_PUBLIC_WC_PROJECT_ID` (публичный Project ID из cloud.reown.com,
+вшивается в бандл при сборке — как все `NEXT_PUBLIC_*`). Пустое значение = пункт меню скрыт,
+сайт продолжает работать через расширение.
+
+Проверка: `npm run build && PORT=3200 npm start`, затем `npm run test:walletconnect` —
+скрипт открывает сайт в Chromium как мобильный Chrome (без `window.ethereum`), проверяет кнопку в шапке,
+пункт меню, появление модалки, отрисовку QR, websocket к relay и отсутствие нарушений CSP.
+
 ## 0.95. Render: сервис запущен (2026-11-20)
 
 | | |

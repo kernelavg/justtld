@@ -49,7 +49,8 @@
       "files": [
         "scripts/test-static-dapp.mjs",
         "scripts/test-static-dapp-local.mjs",
-        "scripts/check-site.mjs"
+        "scripts/check-site.mjs",
+        "scripts/test-walletconnect.mjs"
       ],
       "env": {
         "browser": true,
