@@ -258,6 +258,57 @@ ALIAS/ANAME (Cloudflare, Namecheap) или просто оставьте при�
 > Render не увидит свой сертификат и проверка домена не пройдёт. Если прокси нужен, добавьте
 > CAA-записи `letsencrypt.org` и `pki.goog` (в том числе `issuewild`).
 
+### 3.2-бис. Бесплатный вариант: поддомен без покупки домена
+
+Денег платить не нужно, но понадобятся **два бесплатных аккаунта**: DigitalPlat FreeDomain
+(даёт сам домен) и Cloudflare (даёт DNS с wildcard — без него `*.домен` не сделать).
+Проверено 2026-11-20: `.dpdns.org` и `.qzz.io` есть в Public Suffix List, поэтому Cloudflare
+принимает их как обычную зону.
+
+**Шаг 1. Получить домен (≈5 минут).**
+
+1. Откройте <https://dash.domain.digitalplat.org/> → **Sign up** (нужен только e-mail).
+2. **Register** → введите имя `justtld` → суффикс **`.dpdns.org`** (бесплатный) → **Check availability**.
+3. **DNS-поля пока оставьте пустыми** → **Register**. Домен `justtld.dpdns.org` — ваш на год,
+   продление бесплатное, но **ручное** (напоминание за 120 дней). Ставьте себе напоминание.
+4. Скопируйте домен из списка — он понадобится ниже.
+
+**Шаг 2. Подключить Cloudflare (≈5 минут).**
+
+1. <https://dash.cloudflare.com/> → **Add a site** → введите `justtld.dpdns.org` → план **Free**.
+2. Cloudflare покажет два nameserver-а вида `ada.ns.cloudflare.com`, `bob.ns.cloudflare.com`.
+3. Вернитесь в DigitalPlat → у домена **Manage / Edit DNS** → впишите **оба** NS → сохраните.
+4. Подождите 5–30 минут, пока Cloudflare напишет **Active** (проверить: `nslookup -type=ns justtld.dpdns.org`).
+
+**Шаг 3. Записи в Cloudflare DNS** (прокси **выключен**, серая тучка — иначе Render не выпустит
+сертификат):
+
+| Тип | Name | Content | Зачем |
+| --- | --- | --- | --- |
+| CNAME | `@` | `justtld.onrender.com` | основной адрес приложения (корень зоны обязан смотреть на Render) |
+| CNAME | `*` | `justtld.onrender.com` | все зоны: `myzone.justtld.dpdns.org` |
+| CNAME | `_acme-challenge` | `justtld.verify.renderdns.com` | Render выпускает wildcard-сертификат (Let's Encrypt) |
+| CNAME | `_cf-custom-hostname` | `justtld.hostname.renderdns.com` | подтверждение владения для DDoS-щита Render |
+
+Значения `verify.renderdns.com`/`hostname.renderdns.com` Render показывает **в дашборде** рядом с
+добавленным доменом — если буквы не совпали с таблицей, берите из дашборда.
+
+**Шаг 4. Добавить домены в Render.**
+
+1. Render → сервис `justtld` → **Settings** → **Custom Domains**:
+   - `justtld.dpdns.org` — основной адрес;
+   - `*.justtld.dpdns.org` — wildcard для зон.
+2. Для каждого нажмите **Verify**. Статус должен стать **Verified**, рядом появится сертификат.
+3. Free-план Render включает **2 своих домена**. Если Render сам добавит `www.justtld.dpdns.org`
+   и вы упрётесь в лимит, лишний домен стоит **$0.25/мес** — это единственная возможная плата
+   в бесплатном варианте. `world`-запись `www` можно не добавлять: wildcard её и так покрывает.
+
+**Шаг 5. Переменные и проверка.** — как в §3.3–3.4, только подставьте `justtld.dpdns.org`.
+
+Итог: `justtld.dpdns.org` — приложение, `myzone.justtld.dpdns.org` — зона `.myzone`,
+`любое-свободное.justtld.dpdns.org` — предложение зарегистрировать. Бесплатно, но с двумя
+аккаунтами и ручным продлением домена раз в год.
+
 ### 3.3. Переменные окружения
 
 Render → сервис → **Environment**:
