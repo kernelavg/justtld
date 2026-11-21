@@ -97,13 +97,21 @@ export function middleware(request: NextRequest) {
 
   // Резолвер: myzone.вашдомен → страница зоны, blog.myzone.вашдомен → страница поддомена.
   const target = resolverTarget(request);
-  if (target && request.nextUrl.pathname === '/') {
-    const url = request.nextUrl.clone();
-    url.pathname = '/resolve';
-    url.search = target.label
-      ? `?zone=${encodeURIComponent(target.zone)}&label=${encodeURIComponent(target.label)}`
-      : `?zone=${encodeURIComponent(target.zone)}`;
-    return NextResponse.rewrite(url);
+  if (target) {
+    // На хосте самой зоны поддомен можно открыть первым сегментом пути:
+    // justtld-demo.вашдомен/blog → blog.justtld-demo. Это единственная форма
+    // второго уровня, которой не нужен отдельный сертификат.
+    const subFromPath = target.label ? null : zoneFromPath(request);
+    if (request.nextUrl.pathname === '/' || subFromPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/resolve';
+      const label = target.label ?? subFromPath;
+      const params = [`zone=${encodeURIComponent(target.zone)}`];
+      if (label) params.push(`label=${encodeURIComponent(label)}`);
+      if (subFromPath) params.push('via=path');
+      url.search = `?${params.join('&')}`;
+      return NextResponse.rewrite(url);
+    }
   }
 
   // Тот же резолвер без своего домена: /myzone → зона, /myzone/blog → поддомен.
