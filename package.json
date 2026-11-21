@@ -55,7 +55,8 @@
     "clean": "rm -rf node_modules apps/web/.next packages/*/dist",
     "test:walletconnect": "node scripts/test-walletconnect.mjs",
     "test:resolver": "node scripts/test-resolver.mjs",
-    "setup:domain": "node scripts/setup-domain.mjs"
+    "setup:domain": "node scripts/setup-domain.mjs",
+    "await:domain": "node scripts/await-domain.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
