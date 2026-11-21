@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { siteFilePathSchema } from '@justtld/shared';
+import {
+  createAuctionSchema,
+  placeAuctionBidSchema,
+  siteFilePathSchema,
+} from '@justtld/shared';
 import { hashPassword, verifyPassword } from '@/lib/server/accounts';
 import { buildSafeFqdn } from '@/lib/server/cloudflare-dns';
 import {
@@ -99,5 +103,14 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
     });
     expect(verifyGoogleStateCookieValue(cookieValue, 'wrong-state')).toBeNull();
     expect(verifyGoogleStateCookieValue(`${cookieValue}tamper`, state)).toBeNull();
+  });
+
+  it('валидирует параметры создания аукциона и ставок', () => {
+    expect(
+      createAuctionSchema.parse({ tld: 'meta', startPriceRub: 200, durationHours: 72 }),
+    ).toMatchObject({ tld: '.meta', startPriceRub: 200, durationHours: 72 });
+    expect(() => createAuctionSchema.parse({ tld: '.bad_zone' })).toThrow();
+    expect(placeAuctionBidSchema.parse({ amountRub: 300 }).amountRub).toBe(300);
+    expect(() => placeAuctionBidSchema.parse({ amountRub: 10 })).toThrow();
   });
 });

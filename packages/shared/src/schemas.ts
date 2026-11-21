@@ -290,6 +290,25 @@ export const dnsRecordCreateSchema = z.object({
   priority: z.coerce.number().int().min(0).max(65535).nullable().optional(),
 });
 
+export const createAuctionSchema = z.object({
+  tld: tldSchema,
+  title: z.string().trim().min(1, 'TITLE_EMPTY').max(120).optional(),
+  description: z.string().trim().max(400).optional().default(''),
+  startPriceRub: z.coerce.number().min(50).max(1_000_000).default(190),
+  minStepRub: z.coerce.number().min(10).max(100_000).default(50),
+  durationHours: z.coerce.number().int().min(1).max(24 * 30).default(72),
+});
+
+export const placeAuctionBidSchema = z.object({
+  amountRub: z.coerce.number().min(50).max(5_000_000),
+});
+
+export const claimAuctionSchema = z.object({
+  provider: z.enum(['yoomoney', 'cryptobot', 'sandbox']).default('yoomoney'),
+  currency: z.enum(['RUB', 'USDT', 'TON', 'BTC', 'ETH']).default('RUB'),
+  adminGrant: z.boolean().optional().default(false),
+});
+
 export type ZonesQuery = z.infer<typeof zonesQuerySchema>;
 export type SubdomainsQuery = z.infer<typeof subdomainsQuerySchema>;
 export type PrepareRegistrationInput = z.infer<typeof prepareRegistrationSchema>;

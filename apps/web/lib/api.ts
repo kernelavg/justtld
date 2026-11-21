@@ -2,6 +2,8 @@
 
 import type {
   AccountDto,
+  AuctionBidDto,
+  AuctionDto,
   DnsRecordDto,
   DnsRecordType,
   Paginated,
@@ -545,4 +547,57 @@ export const deleteDnsRecordApi = (tld: string, id: string, sub = '') =>
   apiFetch<{ ok: boolean; id: string }>(
     `/api/dns?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}&id=${encodeURIComponent(id)}`,
     { method: 'DELETE' },
+  );
+
+/* ───────────────────────────── auctions ───────────────────────────── */
+
+export type AuctionsListResponse = {
+  auctions: AuctionDto[];
+  gateways: StoreCatalogResponse['gateways'];
+};
+
+export const getAuctions = (status = 'all') =>
+  apiFetch<AuctionsListResponse>(`/api/auctions?status=${encodeURIComponent(status)}`);
+
+export const getAuctionDetail = (id: string) =>
+  apiFetch<{ auction: AuctionDto; bids: AuctionBidDto[] }>(
+    `/api/auctions/${encodeURIComponent(id)}`,
+  );
+
+export const openAuction = (payload: {
+  tld: string;
+  title?: string;
+  description?: string;
+  startPriceRub?: number;
+  minStepRub?: number;
+  durationHours?: number;
+}) => postJson<{ ok: boolean; auction: AuctionDto }>('/api/auctions', payload);
+
+export const placeAuctionBidApi = (id: string, amountRub: number) =>
+  postJson<{ ok: boolean; auction: AuctionDto; bid: AuctionBidDto }>(
+    `/api/auctions/${encodeURIComponent(id)}/bid`,
+    { amountRub },
+  );
+
+export const claimAuctionApi = (
+  id: string,
+  payload: {
+    provider?: PaymentProvider;
+    currency?: 'RUB' | 'USDT' | 'TON' | 'BTC' | 'ETH';
+    adminGrant?: boolean;
+  },
+) =>
+  postJson<{
+    ok: boolean;
+    granted?: boolean;
+    auction?: AuctionDto;
+    order?: PaymentOrderDto;
+    payUrl?: string | null;
+    instructions?: string;
+  }>(`/api/auctions/${encodeURIComponent(id)}/claim`, payload);
+
+export const cancelAuctionApi = (id: string) =>
+  postJson<{ ok: boolean; auction: AuctionDto }>(
+    `/api/auctions/${encodeURIComponent(id)}/cancel`,
+    {},
   );

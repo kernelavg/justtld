@@ -183,7 +183,38 @@ export type StorePricingDto = {
 
 export type PaymentProvider = 'yoomoney' | 'cryptobot' | 'sandbox';
 export type PaymentStatus = 'pending' | 'paid' | 'fulfilled' | 'expired' | 'failed';
-export type OrderKind = 'listing' | 'custom_zone' | 'custom_subdomain' | 'renewal';
+export type OrderKind = 'listing' | 'custom_zone' | 'custom_subdomain' | 'renewal' | 'auction';
+
+export type AuctionStatus = 'active' | 'awaiting_payment' | 'settled' | 'cancelled';
+
+export type AuctionDto = {
+  id: string;
+  tld: string;
+  title: string;
+  description: string;
+  startPriceRub: number;
+  minStepRub: number;
+  currentBidRub: number;
+  bidsCount: number;
+  leaderAddress: string | null;
+  leaderLabel: string | null;
+  createdBy: string;
+  startsAt: string;
+  endsAt: string;
+  status: AuctionStatus;
+  settlementOrderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuctionBidDto = {
+  id: string;
+  auctionId: string;
+  bidderAddress: string;
+  bidderLabel: string;
+  amountRub: number;
+  createdAt: string;
+};
 
 export type PaymentOrderDto = {
   id: string;

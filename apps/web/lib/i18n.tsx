@@ -13,6 +13,7 @@ export const dictionary = {
   },
   'nav.home': { ru: 'Главная', en: 'Home' },
   'nav.store': { ru: 'Магазин', en: 'Store' },
+  'nav.auctions': { ru: 'Аукционы', en: 'Auctions' },
   'nav.zones': { ru: 'Зоны', en: 'Zones' },
   'nav.subdomains': { ru: 'Поддомены', en: 'Subdomains' },
   'nav.register': { ru: 'Регистрация', en: 'Register' },

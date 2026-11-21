@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   created_at   timestamptz NOT NULL DEFAULT now(),
   paid_at      timestamptz,
   fulfilled_at timestamptz,
-  CONSTRAINT payment_orders_kind_chk CHECK (kind IN ('listing', 'custom_zone', 'custom_subdomain', 'renewal')),
+  CONSTRAINT payment_orders_kind_chk CHECK (kind IN ('listing', 'custom_zone', 'custom_subdomain', 'renewal', 'auction')),
   CONSTRAINT payment_orders_provider_chk CHECK (provider IN ('yoomoney', 'cryptobot', 'sandbox')),
   CONSTRAINT payment_orders_status_chk CHECK (status IN ('pending', 'paid', 'fulfilled', 'expired', 'failed'))
 );
@@ -347,3 +347,49 @@ CREATE TABLE IF NOT EXISTS dns_records (
   CONSTRAINT dns_records_type_chk CHECK (record_type IN ('A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS'))
 );
 CREATE INDEX IF NOT EXISTS dns_records_asset_idx ON dns_records (tld, sub_label, created_at DESC);
+
+-- ══════════ V3: аукционы доменных зон в стиле Handshake ══════════
+
+DO $$
+BEGIN
+  ALTER TABLE payment_orders DROP CONSTRAINT IF EXISTS payment_orders_kind_chk;
+  ALTER TABLE payment_orders
+    ADD CONSTRAINT payment_orders_kind_chk
+    CHECK (kind IN ('listing', 'custom_zone', 'custom_subdomain', 'renewal', 'auction'));
+END $$;
+
+CREATE TABLE IF NOT EXISTS zone_auctions (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tld                 text NOT NULL,
+  title               text NOT NULL DEFAULT '',
+  description         text NOT NULL DEFAULT '',
+  start_price_rub     numeric(12, 2) NOT NULL DEFAULT 190,
+  min_step_rub        numeric(12, 2) NOT NULL DEFAULT 50,
+  current_bid_rub     numeric(12, 2) NOT NULL DEFAULT 0,
+  bids_count          int NOT NULL DEFAULT 0,
+  leader_address      text,
+  leader_label        text,
+  created_by          text NOT NULL,
+  starts_at           timestamptz NOT NULL DEFAULT now(),
+  ends_at             timestamptz NOT NULL,
+  status              text NOT NULL DEFAULT 'active',
+  settlement_order_id uuid REFERENCES payment_orders (id) ON DELETE SET NULL,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT zone_auctions_status_chk CHECK (status IN ('active', 'awaiting_payment', 'settled', 'cancelled')),
+  CONSTRAINT zone_auctions_tld_fmt    CHECK (tld ~ '^\.[a-z0-9-]{2,19}$')
+);
+CREATE INDEX IF NOT EXISTS zone_auctions_status_ends_idx ON zone_auctions (status, ends_at ASC);
+CREATE UNIQUE INDEX IF NOT EXISTS zone_auctions_active_tld_key
+  ON zone_auctions (tld) WHERE status IN ('active', 'awaiting_payment');
+
+CREATE TABLE IF NOT EXISTS zone_auction_bids (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  auction_id     uuid NOT NULL REFERENCES zone_auctions (id) ON DELETE CASCADE,
+  bidder_address text NOT NULL,
+  bidder_label   text NOT NULL,
+  amount_rub     numeric(12, 2) NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS zone_auction_bids_auction_idx
+  ON zone_auction_bids (auction_id, amount_rub DESC, created_at DESC);

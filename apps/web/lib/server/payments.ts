@@ -7,6 +7,8 @@ import {
   getStoreListingById,
   getStorePricing,
   getZoneByTld,
+  linkAuctionOrder,
+  markAuctionSettled,
   markListingSold,
   updatePaymentOrder,
   upsertCustody,
@@ -425,6 +427,10 @@ export async function fulfillPaymentOrder(
     await markListingSold(order.listingId, order.buyerAddress);
   }
 
+  if (order.kind === 'auction' && typeof order.meta?.auctionId === 'string') {
+    await markAuctionSettled(order.meta.auctionId, order.id);
+  }
+
   await ensureStarterSite(order.tld, order.subLabel, order.buyerAddress);
 
   const updated = await updatePaymentOrder(order.id, {
@@ -435,4 +441,87 @@ export async function fulfillPaymentOrder(
     txHash: extra?.txHash ?? undefined,
   });
   return updated ?? order;
+}
+
+/** Создаёт счёт на оплату выигранного аукциона по итоговой ставке. */
+export async function createAuctionSettlementOrder(input: {
+  auctionId: string;
+  tld: string;
+  amountRub: number;
+  buyerAddress: string;
+  buyerEmail?: string | null;
+  provider: PaymentProvider;
+  currency?: string;
+}): Promise<{ order: PaymentOrderDto; payUrl: string | null; instructions: string }> {
+  if (input.provider === 'sandbox' && !paymentsSandbox()) {
+    throw ApiError.forbidden('Тестовая оплата (Sandbox) отключена');
+  }
+
+  const pricing = await getStorePricing();
+  const rubPerUsdt =
+    pricing.customZonePriceUsdt > 0
+      ? pricing.customZonePriceRub / pricing.customZonePriceUsdt
+      : 95;
+  const currency =
+    input.provider === 'yoomoney'
+      ? 'RUB'
+      : input.provider === 'cryptobot'
+        ? (input.currency && input.currency !== 'RUB' ? input.currency : 'USDT')
+        : 'RUB';
+  const amount =
+    currency === 'RUB'
+      ? input.amountRub.toFixed(2)
+      : Math.max(0.5, input.amountRub / rubPerUsdt).toFixed(2);
+
+  const order = await createPaymentOrder({
+    buyerAddress: input.buyerAddress,
+    buyerEmail: input.buyerEmail ?? null,
+    tld: input.tld,
+    subLabel: '',
+    kind: 'auction',
+    listingId: null,
+    provider: input.provider,
+    currency,
+    amount,
+    meta: { periodDays: 365, auctionId: input.auctionId },
+  });
+
+  await linkAuctionOrder(input.auctionId, order.id);
+
+  if (input.provider === 'yoomoney') {
+    const payUrl = buildYooMoneyQuickpayUrl(order);
+    const updated = (await updatePaymentOrder(order.id, { payUrl })) ?? order;
+    return {
+      order: updated,
+      payUrl,
+      instructions:
+        'Оплатите выигранную ставку через ЮMoney — зона и стартовый сайт перейдут к вам автоматически.',
+    };
+  }
+
+  if (input.provider === 'cryptobot') {
+    const inv = await createCryptoBotInvoice({
+      orderId: order.id,
+      amount,
+      asset: currency,
+      description: `JustTLD Auction: ${input.tld} (365 дн.)`,
+    });
+    const updated =
+      (await updatePaymentOrder(order.id, {
+        externalId: inv.invoiceId,
+        payUrl: inv.payUrl,
+      })) ?? order;
+    return {
+      order: updated,
+      payUrl: inv.payUrl,
+      instructions:
+        'Оплатите счёт в @CryptoBot и нажмите «Проверить статус» или дождитесь авто-подтверждения.',
+    };
+  }
+
+  return {
+    order,
+    payUrl: null,
+    instructions: 'Счёт создан в тестовом режиме (Sandbox).',
+  };
 }
