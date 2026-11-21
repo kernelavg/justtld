@@ -41,7 +41,19 @@ function resolverTarget(request: NextRequest): { zone: string; label: string | n
   const parts = prefix.split('.');
   const first = parts[0] ?? '';
   if (['www', 'api', 'admin', 'app'].includes(first)) return null;
-  if (parts.length === 1) return { zone: first, label: null };
+  if (parts.length === 1) {
+    // Одноуровневое имя: myzone.justtld.online → зона .myzone.
+    // Плоский поддомен: blog--myzone.justtld.online → blog.myzone.
+    // Сертификат на *.justtld.online покрывает только один уровень, а публичные CA
+    // не выдают сертификаты на *.*.justtld.online — поэтому второй уровень
+    // передаётся через «--» (он недопустим внутри метки и внутри зоны).
+    const flat = first.split('--');
+    if (flat.length === 2 && flat[1]) {
+      const [flatLabel, flatZone] = flat;
+      if (flatLabel) return { zone: flatZone as string, label: flatLabel };
+    }
+    return { zone: first, label: null };
+  }
   if (parts.length === 2 && parts[1]) return { zone: parts[1], label: first };
   return null;
 }
