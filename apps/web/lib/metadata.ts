@@ -24,12 +24,20 @@ export function parseZoneMetadata(raw: string | null | undefined): ParsedMetadat
           ? (record[key] as string).trim()
           : null;
       const urlCandidate = str('url') ?? str('site') ?? str('redirect');
-      const safeUrl =
-        urlCandidate && /^https?:\/\//i.test(urlCandidate) ? urlCandidate : null;
+      const safeUrl = urlCandidate && /^https?:\/\//i.test(urlCandidate) ? urlCandidate : null;
       const title = str('title') ?? str('name');
       const description = str('description') ?? str('desc') ?? str('bio');
 
-      const known = new Set(['url', 'site', 'redirect', 'title', 'name', 'description', 'desc', 'bio']);
+      const known = new Set([
+        'url',
+        'site',
+        'redirect',
+        'title',
+        'name',
+        'description',
+        'desc',
+        'bio',
+      ]);
       const extra: Array<[string, string]> = [];
       for (const [k, v] of Object.entries(record)) {
         if (known.has(k) || v === undefined || v === null) continue;
@@ -46,11 +54,11 @@ export function parseZoneMetadata(raw: string | null | undefined): ParsedMetadat
 }
 
 /** Собирает компактный JSON для метаданных (в пределах 512 байт контракта). */
-export function buildMetadataJson(fields: {
-  url?: string;
-  title?: string;
-  description?: string;
-}): { json: string; bytes: number; tooLong: boolean } {
+export function buildMetadataJson(fields: { url?: string; title?: string; description?: string }): {
+  json: string;
+  bytes: number;
+  tooLong: boolean;
+} {
   const payload: Record<string, string> = {};
   if (fields.url?.trim()) payload.url = fields.url.trim();
   if (fields.title?.trim()) payload.title = fields.title.trim();
@@ -67,15 +75,21 @@ export function buildResolverLinks(options: {
   baseDomain?: string;
 }): Array<{ label: string; url: string; recommended?: boolean }> {
   const zone = options.tld.replace(/^\.+/, '').toLowerCase();
-  const domain = (options.baseDomain ?? 'justtld.online').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const domain = (options.baseDomain ?? 'justtld.online')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
   const sub = options.label?.trim().toLowerCase() ?? '';
 
   if (sub) {
     return [
       {
+        label: 'Двухуровневый домен',
+        url: `https://${sub}.${zone}.${domain}`,
+        recommended: true,
+      },
+      {
         label: 'На хосте зоны',
         url: `https://${zone}.${domain}/${sub}`,
-        recommended: true,
       },
       {
         label: 'Плоский поддомен',
