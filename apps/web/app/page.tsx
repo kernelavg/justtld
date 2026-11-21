@@ -70,28 +70,28 @@ export default function HomePage() {
       {/* Hero: на мобилке центрированный, на десктопе — полноценный 2-колоночный макет */}
       <section className="relative overflow-hidden gradient-hero">
         <div className="container py-14 md:py-20 lg:py-24">
-          <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-10">
+          <div className="grid items-center gap-10 lg:grid-cols-12 lg:gap-10">
             {/* Левая колонка: оффер, поиск и кнопки */}
-            <div className="mx-auto max-w-xl text-center lg:col-span-6 lg:mx-0 lg:text-left">
+            <div className="mx-auto w-full min-w-0 max-w-xl text-center lg:col-span-6 lg:mx-0 lg:text-left">
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 <span>{t('home.badge')}</span>
               </div>
 
-              <h1 className="title-gradient text-4xl font-semibold tracking-tight sm:text-5xl lg:text-[52px] lg:leading-[1.06]">
+              <h1 className="title-gradient text-[28px] leading-[1.12] font-semibold tracking-tight sm:text-5xl lg:text-[52px] lg:leading-[1.06]">
                 Твоё пространство в сети.{' '}
                 <span className="brand-text-gradient">За минуту.</span>
               </h1>
 
-              <p className="mt-5 text-[15px] leading-relaxed text-muted-foreground sm:text-base lg:max-w-lg">
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base lg:max-w-lg">
                 {t('home.subtitle')}
               </p>
 
               <form
                 onSubmit={check}
-                className="mx-auto mt-8 flex max-w-md items-center gap-1.5 rounded-full border border-border/90 bg-card/85 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors focus-within:border-primary/50 lg:mx-0"
+                className="mx-auto mt-7 flex w-full max-w-md items-center gap-1 rounded-full border border-border/90 bg-card/85 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors focus-within:border-primary/50 lg:mx-0"
               >
-                <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
+                <Search className="ml-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(event) => {
@@ -99,14 +99,14 @@ export default function HomePage() {
                     setAvailability(null);
                   }}
                   placeholder={t('home.searchPlaceholder')}
-                  className="mono h-9 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
+                  className="mono h-9 min-w-0 flex-1 border-0 bg-transparent px-2 text-xs shadow-none focus-visible:ring-0 sm:text-sm"
                   aria-label={t('home.searchPlaceholder')}
                 />
                 <Button
                   type="submit"
                   size="sm"
                   disabled={checking}
-                  className="h-8 shrink-0 rounded-full px-4"
+                  className="h-8 shrink-0 rounded-full px-3.5 sm:px-4"
                 >
                   {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('home.check')}
                 </Button>
@@ -161,43 +161,43 @@ export default function HomePage() {
             </div>
 
             {/* Правая колонка: живое превью окна браузера (на десктопе справа, на мобилке снизу) */}
-            <div className="mx-auto w-full max-w-xl lg:col-span-6 lg:max-w-none">
+            <div className="mx-auto w-full min-w-0 max-w-xl lg:col-span-6 lg:max-w-none">
               <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/65 shadow-2xl shadow-black/30 backdrop-blur-xl">
-                <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2.5 sm:px-4 sm:py-3">
+                  <div className="hidden items-center gap-1.5 sm:flex">
                     <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
                     <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
                     <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
                   </div>
-                  <div className="mono flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground">
-                    <Lock className="h-3 w-3 text-success" />
-                    <span>
+                  <div className="mono flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] text-muted-foreground sm:flex-initial">
+                    <Lock className="h-3 w-3 shrink-0 text-success" />
+                    <span className="truncate">
                       https://<span className="text-foreground">{previewZone || 'brand'}</span>
                       .justtld.online
                     </span>
                   </div>
-                  <span className="rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <span className="hidden rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline-flex">
                     HTTPS
                   </span>
                 </div>
 
-                <div className="space-y-5 p-6">
+                <div className="space-y-4 p-4 sm:space-y-5 sm:p-6">
                   <div className="grid grid-cols-3 divide-x divide-border/50">
-                    <div className="pr-3">
-                      <div className="text-[11px] text-muted-foreground">Всего зон</div>
-                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                    <div className="min-w-0 pr-2 sm:pr-3">
+                      <div className="truncate text-[10px] text-muted-foreground sm:text-[11px]">Всего зон</div>
+                      <div className="mt-0.5 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
                         {stats.data ? formatNumber(stats.data.total, language) : '—'}
                       </div>
                     </div>
-                    <div className="px-4">
-                      <div className="text-[11px] text-muted-foreground">Активных</div>
-                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                    <div className="min-w-0 px-2.5 sm:px-4">
+                      <div className="truncate text-[10px] text-muted-foreground sm:text-[11px]">Активных</div>
+                      <div className="mt-0.5 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
                         {stats.data ? formatNumber(stats.data.active, language) : '—'}
                       </div>
                     </div>
-                    <div className="pl-4">
-                      <div className="text-[11px] text-muted-foreground">Владельцев</div>
-                      <div className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">
+                    <div className="min-w-0 pl-2.5 sm:pl-4">
+                      <div className="truncate text-[10px] text-muted-foreground sm:text-[11px]">Владельцев</div>
+                      <div className="mt-0.5 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
                         {stats.data ? formatNumber(stats.data.uniqueOwners, language) : '—'}
                       </div>
                     </div>
@@ -205,16 +205,16 @@ export default function HomePage() {
 
                   <div className="space-y-2 border-t border-border/50 pt-4 text-xs">
                     {[
-                      { host: `${previewZone || 'brand'}.justtld.online`, tag: 'Основной сайт' },
+                      { host: `${previewZone || 'brand'}.justtld.online`, tag: 'Сайт' },
                       { host: `app.${previewZone || 'brand'}.justtld.online`, tag: 'Поддомен' },
-                      { host: `dns.${previewZone || 'brand'}.justtld.online`, tag: 'A / CNAME / TXT' },
+                      { host: `dns.${previewZone || 'brand'}.justtld.online`, tag: 'DNS' },
                     ].map((row) => (
                       <div
                         key={row.host}
-                        className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 px-3 py-2"
+                        className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/50 px-3 py-2"
                       >
-                        <span className="mono text-foreground/90">{row.host}</span>
-                        <span className="text-[11px] text-muted-foreground">{row.tag}</span>
+                        <span className="mono min-w-0 truncate text-foreground/90">{row.host}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">{row.tag}</span>
                       </div>
                     ))}
                   </div>
