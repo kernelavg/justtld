@@ -91,10 +91,15 @@ function renderParkedHtml(params: {
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const rawZone = (url.searchParams.get('zone') ?? '').trim().toLowerCase();
-  const rawLabel = (url.searchParams.get('label') ?? '').trim().toLowerCase();
-  const rawPath = url.searchParams.get('path') ?? '/';
-  const isRootMode = url.searchParams.get('root') === '1';
+  const rawZone = (url.searchParams.get('zone') ?? request.headers.get('x-site-zone') ?? '')
+    .trim()
+    .toLowerCase();
+  const rawLabel = (url.searchParams.get('label') ?? request.headers.get('x-site-label') ?? '')
+    .trim()
+    .toLowerCase();
+  const rawPath = url.searchParams.get('path') ?? request.headers.get('x-site-path') ?? '/';
+  const isRootMode =
+    (url.searchParams.get('root') ?? request.headers.get('x-site-root') ?? '0') === '1';
 
   const parsedTld = tldSchema.safeParse(rawZone.startsWith('.') ? rawZone : `.${rawZone}`);
   if (!parsedTld.success) {

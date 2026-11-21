@@ -140,7 +140,16 @@ export function middleware(request: NextRequest) {
       if (target.root) params.push('root=1');
       params.push(`path=${encodeURIComponent(pathname)}`);
       url.search = `?${params.join('&')}`;
-      return NextResponse.rewrite(url);
+
+      const reqHeaders = new Headers(request.headers);
+      reqHeaders.set('x-site-zone', target.zone);
+      reqHeaders.set('x-site-label', target.label ?? '');
+      reqHeaders.set('x-site-root', target.root ? '1' : '0');
+      reqHeaders.set('x-site-path', pathname);
+
+      return NextResponse.rewrite(url, {
+        request: { headers: reqHeaders },
+      });
     }
   }
 
