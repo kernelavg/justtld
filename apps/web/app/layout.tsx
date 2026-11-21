@@ -7,14 +7,15 @@ import { SiteFooter } from '@/components/layout/site-footer';
 export const metadata: Metadata = {
   title: 'JustTLD — создай свою зону',
   description:
-    'JustTLD — децентрализованный реестр пользовательских TLD-зон: регистрация, передача и продление напрямую с кошелька.',
+    'JustTLD — платформа пользовательских доменных зон, поддоменов, встроенного хостинга сайтов и DNS.',
   applicationName: 'JustTLD',
-  keywords: ['TLD', 'blockchain', 'registry', 'web3', 'domains', 'JustTLD'],
+  keywords: ['TLD', 'blockchain', 'registry', 'web3', 'domains', 'JustTLD', 'DNS'],
   authors: [{ name: 'JustTLD' }],
   openGraph: {
     title: 'JustTLD — создай свою зону',
-    description: 'Реестр пользовательских TLD-зон на блокчейне.',
+    description: 'Собственные доменные зоны, поддомены, сайты и DNS в один клик.',
     type: 'website',
+    images: [{ url: '/brand/logo-wide.png', width: 1440, height: 720, alt: 'JustTLD' }],
   },
 };
 
@@ -22,8 +23,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1020' },
+    { media: '(prefers-color-scheme: light)', color: '#f9fafb' },
+    { media: '(prefers-color-scheme: dark)', color: '#09090b' },
   ],
 };
 

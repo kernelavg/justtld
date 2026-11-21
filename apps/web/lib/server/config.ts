@@ -115,3 +115,15 @@ export function cryptoBotToken(): string {
 export function paymentsSandbox(): boolean {
   return process.env.PAYMENTS_SANDBOX === 'true' || (!yoomoneyWallet() && !cryptoBotToken());
 }
+
+export function googleClientId(): string {
+  return (process.env.GOOGLE_CLIENT_ID ?? '').trim();
+}
+
+export function googleClientSecret(): string {
+  return (process.env.GOOGLE_CLIENT_SECRET ?? '').trim();
+}
+
+export function googleAuthEnabled(): boolean {
+  return Boolean(googleClientId() && googleClientSecret());
+}

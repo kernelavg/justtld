@@ -10,6 +10,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Store,
   Wallet,
 } from 'lucide-react';
 import {
@@ -71,21 +72,26 @@ export default function HomePage() {
 
   return (
     <div>
-      <section className="gradient-hero border-b">
-        <div className="container py-14 md:py-20">
+      <section className="relative overflow-hidden border-b border-border/60 gradient-hero">
+        <div className="bg-grid-subtle pointer-events-none absolute inset-0 opacity-35 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
+        <div className="container relative py-16 md:py-24">
           <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" /> {t('home.badge')}
-            </span>
-            <h1 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">
+            <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-md">
+              <img src="/brand/icon.png" alt="" className="h-4 w-4 rounded" />
+              <span>{t('home.badge')}</span>
+            </div>
+
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
               {t('home.title')}
             </h1>
-            <p className="mt-3 text-lg font-medium text-primary">{t('app.tagline')}</p>
-            <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">{t('home.subtitle')}</p>
+            <p className="mt-3 text-lg font-medium brand-text-gradient">{t('app.tagline')}</p>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground">
+              {t('home.subtitle')}
+            </p>
 
             <form
               onSubmit={check}
-              className="mx-auto mt-8 flex max-w-xl flex-col gap-2 sm:flex-row"
+              className="mx-auto mt-8 flex max-w-xl flex-col gap-2 rounded-2xl border border-border/80 bg-card/80 p-2 shadow-lg shadow-black/5 backdrop-blur-xl sm:flex-row"
             >
               <Input
                 value={query}
@@ -94,10 +100,10 @@ export default function HomePage() {
                   setAvailability(null);
                 }}
                 placeholder={t('home.searchPlaceholder')}
-                className="mono h-12 text-base"
+                className="mono h-11 border-0 bg-transparent text-base shadow-none focus-visible:ring-0"
                 aria-label={t('home.searchPlaceholder')}
               />
-              <Button type="submit" size="lg" disabled={checking} className="h-12">
+              <Button type="submit" size="lg" disabled={checking} className="h-11 shrink-0 px-6">
                 {checking ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -110,22 +116,27 @@ export default function HomePage() {
             {availability && (
               <div className="mx-auto mt-3 max-w-xl text-left">
                 {availability.available ? (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-success/40 bg-success/5 px-4 py-3 text-sm text-success">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-success/40 bg-success/10 px-4 py-3 text-sm text-success backdrop-blur-sm">
                     <span className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
                       <span className="mono font-medium">{availability.tld}</span> —{' '}
                       {t('home.available')}
                     </span>
-                    <Button asChild size="sm" variant="success">
-                      <Link href={`/register?tld=${encodeURIComponent(availability.tld)}`}>
-                        {t('home.ctaRegister')}
-                      </Link>
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href="/store">Купить в магазине</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="success">
+                        <Link href={`/register?tld=${encodeURIComponent(availability.tld)}`}>
+                          {t('home.ctaRegister')}
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive backdrop-blur-sm">
                     <span className="flex items-center gap-2">
-                      <CircleAlert className="h-4 w-4" />
+                      <CircleAlert className="h-4 w-4 shrink-0" />
                       <span className="mono font-medium">{availability.tld}</span> —{' '}
                       {describeReason(availability.reason, language)}
                     </span>
@@ -140,25 +151,27 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Button asChild size="lg">
-                <Link href="/register">
-                  {t('home.ctaRegister')} <ArrowRight className="h-4 w-4" />
+                <Link href="/store">
+                  <Store className="h-4 w-4" />
+                  {t('nav.store')}
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/zones">{t('home.ctaExplore')}</Link>
+                <Link href="/register">{t('home.ctaRegister')}</Link>
               </Button>
               <Button asChild size="lg" variant="ghost">
-                <Link href="/subdomains">{t('nav.subdomains')}</Link>
+                <Link href="/zones">{t('home.ctaExplore')}</Link>
               </Button>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="container py-10">
+      <section className="container py-12">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold tracking-tight">{t('home.stats')}</h2>
-          <span className="text-xs text-muted-foreground">
+          <span className="mono text-xs text-muted-foreground">
             {t('home.indexed')}:{' '}
             {stats.data ? formatNumber(stats.data.lastIndexedBlock, language) : '—'} ·{' '}
             {t('home.lag')}: {stats.data?.lag ?? '—'}
@@ -166,9 +179,9 @@ export default function HomePage() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {statCards.map((card) => (
-            <Card key={card.label}>
+            <Card key={card.label} className="card-hover">
               <CardContent className="p-4">
-                <div className="text-2xl font-semibold tabular-nums">
+                <div className="text-2xl font-semibold tracking-tight tabular-nums">
                   {card.value === undefined ? (
                     <Skeleton className="h-7 w-12" />
                   ) : (
@@ -189,25 +202,27 @@ export default function HomePage() {
             { icon: ShieldCheck, title: t('home.step2.title'), text: t('home.step2.text') },
             { icon: Sparkles, title: t('home.step3.title'), text: t('home.step3.text') },
           ].map((step, index) => (
-            <Card key={step.title} className="h-full">
+            <Card key={step.title} className="card-hover h-full">
               <CardHeader className="pb-2">
-                <div className="flex items-center gap-2 text-primary">
-                  <step.icon className="h-4 w-4" />
-                  <span className="text-xs font-semibold uppercase tracking-wide">
+                <div className="flex items-center gap-2.5 text-primary">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg border border-primary/25 bg-primary/10">
+                    <step.icon className="h-4 w-4" />
+                  </span>
+                  <span className="mono text-xs font-semibold uppercase tracking-wider">
                     0{index + 1}
                   </span>
                 </div>
-                <CardTitle className="pt-1 text-base">{step.title}</CardTitle>
+                <CardTitle className="pt-2 text-base">{step.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">{step.text}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{step.text}</p>
               </CardContent>
             </Card>
           ))}
         </div>
       </section>
 
-      <section className="container py-10">
+      <section className="container py-12">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold tracking-tight">{t('home.recent')}</h2>
           <Button asChild variant="ghost" size="sm">
@@ -220,7 +235,7 @@ export default function HomePage() {
         {recent.loading ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-32" />
+              <Skeleton key={index} className="h-32 rounded-xl" />
             ))}
           </div>
         ) : recent.data && recent.data.items.length > 0 ? (

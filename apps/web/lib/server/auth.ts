@@ -88,7 +88,7 @@ export async function issueSession(address: string): Promise<IssuedSession> {
     .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
     .sign(secretKey());
 
-  const base = `Path=/; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}`;
+  const base = `Path=/; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}`;
   const secure = isProduction() ? '; Secure' : '';
   const cookies = [
     `${SESSION_COOKIE}=${jwt}; HttpOnly; ${base}${secure}`,
@@ -100,8 +100,8 @@ export async function issueSession(address: string): Promise<IssuedSession> {
 
 export function clearSessionCookies(): string[] {
   return [
-    `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0`,
-    `${CSRF_COOKIE}=; Path=/; SameSite=Strict; Max-Age=0`,
+    `${SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`,
+    `${CSRF_COOKIE}=; Path=/; SameSite=Lax; Max-Age=0`,
   ];
 }
 

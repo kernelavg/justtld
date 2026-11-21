@@ -162,6 +162,7 @@ export type SessionResponse = {
   session: { address: string; role: 'admin' | 'user' } | null;
   account?: AccountDto | null;
   adminAddress: string | null;
+  googleAuthEnabled?: boolean;
 };
 
 export const getSession = () => apiFetch<SessionResponse>('/api/auth/session');

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { Globe, Menu, Moon, Sun, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
 import { ConnectWallet } from '@/components/wallet/connect-wallet';
@@ -21,6 +22,17 @@ const NAV: Array<{ href: string; key: TranslationKey }> = [
   { href: '/docs', key: 'nav.docs' },
 ];
 
+const GOOGLE_AUTH_ERRORS: Record<string, string> = {
+  google_not_configured:
+    'Google Auth пока не настроен на сервере (нужны GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET)',
+  google_cancelled: 'Вход через Google отменён',
+  google_invalid_state: 'Истекла сессия авторизации Google — попробуйте ещё раз',
+  google_token_failed: 'Не удалось завершить вход через Google',
+  google_token_missing: 'Google не выдал токен доступа',
+  google_profile_failed: 'Не удалось получить профиль Google',
+  google_email_unverified: 'Email в Google-аккаунте должен быть подтверждён',
+};
+
 export function SiteHeader() {
   const { t, language, setLanguage } = useI18n();
   const pathname = usePathname();
@@ -28,19 +40,50 @@ export function SiteHeader() {
   const [mounted, setMounted] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  React.useEffect(() => setMounted(true), []);
+  React.useEffect(() => {
+    setMounted(true);
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const auth = params.get('auth');
+    const err = params.get('auth_error');
+    if (auth === 'google') {
+      toast.success('Вход через Google выполнен');
+      params.delete('auth');
+      const next = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}${next ? `?${next}` : ''}`,
+      );
+    } else if (err) {
+      toast.error(GOOGLE_AUTH_ERRORS[err] ?? 'Ошибка входа через Google');
+      params.delete('auth_error');
+      const next = params.toString();
+      window.history.replaceState(
+        {},
+        '',
+        `${window.location.pathname}${next ? `?${next}` : ''}`,
+      );
+    }
+  }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-xl">
       <div className="container flex h-16 items-center gap-3">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-primary">
-            ⬢
+        <Link href="/" className="group flex items-center gap-2.5 font-semibold">
+          <img
+            src="/brand/icon.png"
+            alt="JustTLD"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-lg shadow-sm ring-1 ring-white/10 transition-transform duration-150 group-hover:scale-105"
+          />
+          <span className="text-[17px] font-bold tracking-tight">
+            Just<span className="brand-text-gradient">TLD</span>
           </span>
-          <span className="text-base tracking-tight">JustTLD</span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-1 lg:flex">
+        <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
           {NAV.map((item) => {
             const active =
               pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
@@ -49,8 +92,10 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground',
-                  active ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground',
+                  'rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-secondary/80 hover:text-foreground',
+                  active
+                    ? 'bg-secondary font-medium text-foreground shadow-sm ring-1 ring-border/70'
+                    : 'text-muted-foreground',
                 )}
               >
                 {t(item.key)}
@@ -90,7 +135,6 @@ export function SiteHeader() {
             <ConnectWallet />
           </div>
 
-          {/* На телефоне подпись не помещается — оставляем иконку, чтобы подключение было в один тап. */}
           <div className="sm:hidden">
             <ConnectWallet compact />
           </div>
@@ -108,22 +152,28 @@ export function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t bg-background lg:hidden">
-          <nav className="container flex flex-col py-2">
-            {NAV.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  'rounded-md px-3 py-2 text-sm',
-                  pathname === item.href ? 'bg-accent font-medium' : 'text-muted-foreground',
-                )}
-              >
-                {t(item.key)}
-              </Link>
-            ))}
-            <div className="px-3 py-2 sm:hidden">
+        <div className="border-t border-border/60 bg-background/95 backdrop-blur-xl lg:hidden">
+          <nav className="container flex flex-col gap-1 py-3">
+            {NAV.map((item) => {
+              const active =
+                pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'rounded-lg px-3 py-2 text-sm transition-colors',
+                    active
+                      ? 'bg-secondary font-medium text-foreground'
+                      : 'text-muted-foreground hover:bg-secondary/60',
+                  )}
+                >
+                  {t(item.key)}
+                </Link>
+              );
+            })}
+            <div className="px-2 pt-2 sm:hidden">
               <ConnectWallet />
             </div>
           </nav>

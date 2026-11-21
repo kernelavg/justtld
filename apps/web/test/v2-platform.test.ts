@@ -8,6 +8,11 @@ import {
   verifyCryptoBotWebhookSignature,
   verifyYooMoneyNotificationSignature,
 } from '@/lib/server/payments';
+import {
+  createGoogleStateCookieValue,
+  sanitizeNextPath,
+  verifyGoogleStateCookieValue,
+} from '@/lib/server/google-oauth';
 
 describe('V2: безопасность аккаунтов, файлов, DNS и платежей', () => {
   it('хеширует и проверяет пароль через scrypt', () => {
@@ -80,5 +85,16 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
 
     expect(verifyCryptoBotWebhookSignature(rawBody, sig)).toBe(true);
     expect(verifyCryptoBotWebhookSignature(rawBody, '0'.repeat(64))).toBe(false);
+  });
+
+  it('подписывает и проверяет state для Google OAuth и фильтрует open-redirect', () => {
+    expect(sanitizeNextPath('/dashboard')).toBe('/dashboard');
+    expect(sanitizeNextPath('https://evil.com')).toBe('/store');
+    expect(sanitizeNextPath('//evil.com')).toBe('/store');
+
+    const { state, cookieValue } = createGoogleStateCookieValue('/dashboard');
+    expect(verifyGoogleStateCookieValue(cookieValue, state)).toEqual({ next: '/dashboard' });
+    expect(verifyGoogleStateCookieValue(cookieValue, 'wrong-state')).toBeNull();
+    expect(verifyGoogleStateCookieValue(`${cookieValue}tamper`, state)).toBeNull();
   });
 });

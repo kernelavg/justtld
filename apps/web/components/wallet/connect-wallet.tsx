@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown, Copy, LogOut, Wallet, FlaskConical, Smartphone } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, Copy, LogOut, Mail, Wallet, FlaskConical, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { shortenAddress } from '@justtld/shared';
 import { Button } from '@/components/ui/button';
@@ -100,10 +101,25 @@ export function ConnectWallet({
       </Button>
 
       {open && (
-        <div className="absolute right-4 z-50 mt-2 w-72 rounded-lg border bg-card p-2 shadow-lg">
+        <div className="absolute right-4 z-50 mt-2 w-72 rounded-xl border border-border/80 bg-card/95 p-2 shadow-xl backdrop-blur-xl">
+          <Link
+            href="/dashboard"
+            onClick={() => setOpen(false)}
+            className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+          >
+            <span className="flex items-center gap-1.5 font-medium">
+              <Mail className="h-3.5 w-3.5 text-primary" /> Google / Email вход
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Личный кабинет, сайты и покупки без кошелька
+            </span>
+          </Link>
+
+          <div className="my-1 border-t border-border/60" />
+
           <button
             type="button"
-            className="flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+            className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
             onClick={async () => {
               setOpen(false);
               await wallet.connectInjected();

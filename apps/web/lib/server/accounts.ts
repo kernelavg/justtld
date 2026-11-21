@@ -65,3 +65,28 @@ export async function authenticateEmailAccount(email: string, password: string) 
     createdAt: account.createdAt,
   };
 }
+
+export async function upsertGoogleAccount(input: {
+  email: string;
+  displayName?: string | null;
+}) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const existing = await getAccountWithPasswordByEmail(normalizedEmail);
+  if (existing) {
+    return {
+      id: existing.id,
+      email: existing.email,
+      walletAddress: existing.walletAddress,
+      displayName: existing.displayName ?? input.displayName ?? null,
+      createdAt: existing.createdAt,
+    };
+  }
+  const passwordHash = hashPassword(randomBytes(32).toString('hex'));
+  const walletAddress = generateVirtualAddress(normalizedEmail);
+  return createAccount({
+    email: normalizedEmail,
+    passwordHash,
+    walletAddress,
+    displayName: input.displayName?.trim() || null,
+  });
+}
