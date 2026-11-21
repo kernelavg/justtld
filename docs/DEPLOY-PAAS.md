@@ -309,6 +309,27 @@ ALIAS/ANAME (Cloudflare, Namecheap) или просто оставьте при�
 `любое-свободное.justtld.dpdns.org` — предложение зарегистрировать. Бесплатно, но с двумя
 аккаунтами и ручным продлением домена раз в год.
 
+### 3.2-тер. Автоматическая настройка (два токена — и всё)
+
+Если не хочется кликать ни в Cloudflare, ни в Render, всё делает скрипт:
+
+```bash
+CF_API_TOKEN=...            # Cloudflare → My Profile → API Tokens → шаблон «Edit zone DNS»
+RENDER_API_KEY=rnd_...      # Render → Account Settings → API Keys
+DOMAIN=justtld.online \
+RENDER_SERVICE_ID=srv-...   # Render → сервис → Settings → Service ID
+npm run setup:domain
+```
+
+Скрипт идемпотентен: создаёт четыре CNAME (корень, `*`, `_acme-challenge`, `_cf-custom-hostname`),
+добавляет в Render `домен` и `*.домен`, прописывает `RESOLVER_DOMAIN` и `NEXT_PUBLIC_APP_URL`,
+запускает сборку и затем сам проверяет, что wildcard резолвится. Флаг `--dry-run` показывает план
+без изменений, `--dns-only` / `--render-only` — только одну половину.
+
+Значения `verify.renderdns.com` и `hostname.renderdns.com` содержат имя сервиса (`justtld`) и
+одинаковы для всех доменов сервиса — если Render в дашборде покажет другие, поправьте переменную
+`RENDER_HOST`/правьте записи руками.
+
 ### 3.3. Переменные окружения
 
 Render → сервис → **Environment**:

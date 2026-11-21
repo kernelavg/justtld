@@ -570,6 +570,7 @@ npm run test:integration # 8 тестов indexer на реальных собы
 npm run test:ui        # 28 тестов: API (19) + интерфейс (9) через jsdom
 npm run test:resolver  # резолвер: поддомены зон, редирект из метаданных, служебные имена
 npm run test:walletconnect # WalletConnect в мобильном браузере (нужен запущенный сервер)
+npm run setup:domain    # домен резолвера: 4 записи в Cloudflare + домены/env/деплой в Render
 npm run verify:e2e     # сквозной сценарий из 19 шагов против живой системы
 npm run lint           # ESLint (0 warnings)
 npm run typecheck      # TS strict: корень + контракты + web
