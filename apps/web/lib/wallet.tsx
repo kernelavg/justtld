@@ -7,6 +7,7 @@ import {
   custom,
   defineChain,
   http,
+  stringToHex,
   type Hex,
   type PublicClient,
 } from 'viem';
@@ -71,6 +72,7 @@ type Eip1193Provider = {
   connect?: () => Promise<void>;
   accounts?: string[];
   chainId?: number;
+  session?: unknown;
 };
 
 function getInjectedProvider(): Eip1193Provider | null {
@@ -207,7 +209,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       });
 
       // WalletConnect требует явного connect(): он показывает QR/диплинк и ждёт подтверждения.
-      if (!provider.session) {
+      const sessionObj = provider.session as
+        | { namespaces?: { eip155?: { methods?: string[] } } }
+        | undefined;
+      const hasPersonalSign = Boolean(
+        sessionObj?.namespaces?.eip155?.methods?.includes('personal_sign'),
+      );
+      if (!provider.session || !hasPersonalSign) {
+        if (provider.session && provider.disconnect) {
+          await provider.disconnect().catch(() => undefined);
+        }
         if (!provider.connect)
           throw new Error('WalletConnect: провайдер не поддерживает connect()');
         await provider.connect();
@@ -343,8 +354,50 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
       const provider = activeProvider();
       if (!provider) throw new Error('NO_INJECTED_WALLET');
-      const walletClient = createWalletClient({ chain: justtldChain, transport: custom(provider) });
-      return walletClient.signMessage({ account: state.address, message });
+
+      if (state.kind === 'walletconnect' && !provider.session) {
+        if (provider.connect) {
+          await provider.connect();
+        }
+      }
+
+      const hexMessage = stringToHex(message);
+      try {
+        const sig = await provider.request({
+          method: 'personal_sign',
+          params: [hexMessage, state.address],
+        });
+        if (typeof sig === 'string' && sig.startsWith('0x')) {
+          return sig as Hex;
+        }
+        throw new Error('Кошелёк вернул некорректную подпись');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err ?? '');
+        const code = (err as { code?: number } | null)?.code;
+        if (code === 4001 || /reject|denied|cancel/i.test(msg)) {
+          throw new Error('Подпись отклонена в кошельке');
+        }
+        // Некоторые мобильные/браузерные кошельки ждут plain-text вместо hex в personal_sign
+        if (!/includes/i.test(msg)) {
+          try {
+            const fallbackSig = await provider.request({
+              method: 'personal_sign',
+              params: [message, state.address],
+            });
+            if (typeof fallbackSig === 'string' && fallbackSig.startsWith('0x')) {
+              return fallbackSig as Hex;
+            }
+          } catch {
+            // Игнорируем ошибку fallback, покажем основную
+          }
+        }
+        if (/includes|session|no matching key|topic/i.test(msg)) {
+          throw new Error(
+            'Сессия кошелька устарела или неполная. Нажмите «Отключить» в шапке и подключите кошелёк заново.',
+          );
+        }
+        throw new Error(msg || 'Не удалось подписать сообщение в кошельке');
+      }
     },
     [activeProvider, state.address, state.kind],
   );

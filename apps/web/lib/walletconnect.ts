@@ -46,6 +46,15 @@ export async function getWalletConnectProvider(chainId: number): Promise<Eip1193
         projectId: WC_PROJECT_ID,
         chains: [chainId],
         optionalChains: [chainId],
+        methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData_v4'],
+        optionalMethods: [
+          'eth_sign',
+          'eth_signTypedData',
+          'eth_signTypedData_v4',
+          'personal_sign',
+          'wallet_switchEthereumChain',
+          'wallet_addEthereumChain',
+        ],
         showQrModal: true,
         qrModalOptions: { themeMode: 'dark' },
         metadata: {
