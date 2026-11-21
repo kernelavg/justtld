@@ -9,6 +9,7 @@ import {
   Globe2,
   Layers,
   Loader2,
+  Lock,
   Search,
   Sparkles,
 } from 'lucide-react';
@@ -20,7 +21,6 @@ import {
   type ZoneDto,
 } from '@justtld/shared';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/primitives';
 import { ZoneCard } from '@/components/zones/zone-card';
@@ -60,33 +60,37 @@ export default function HomePage() {
     }
   };
 
+  const previewZone = (query.trim().replace(/^\.+/, '').toLowerCase() || 'brand').replace(
+    /[^a-z0-9-]/g,
+    '',
+  );
+
   return (
     <div>
       {/* Hero */}
-      <section className="relative overflow-hidden border-b border-border/50 gradient-hero">
-        <div className="bg-grid-subtle pointer-events-none absolute inset-0 opacity-25 [mask-image:radial-gradient(ellipse_at_center,black_25%,transparent_70%)]" />
-        <div className="container relative py-20 md:py-28">
+      <section className="relative overflow-hidden gradient-hero">
+        <div className="container py-20 md:py-28">
           <div className="mx-auto max-w-2xl text-center">
             <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-md">
-              <img src="/brand/icon.png" alt="" className="h-3.5 w-3.5 rounded-[4px]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               <span>{t('home.badge')}</span>
             </div>
 
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-[54px] md:leading-[1.08]">
-              Своя доменная зона{' '}
-              <span className="brand-text-gradient block sm:inline">за минуту</span>
+            <h1 className="title-gradient text-4xl font-semibold tracking-tight sm:text-5xl md:text-[56px] md:leading-[1.06]">
+              Твоё пространство в сети.{' '}
+              <span className="brand-text-gradient">За одну минуту.</span>
             </h1>
 
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">
+            <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-muted-foreground sm:text-base">
               {t('home.subtitle')}
             </p>
 
-            {/* Поиск */}
+            {/* Поиск зоны */}
             <form
               onSubmit={check}
-              className="mx-auto mt-9 flex max-w-lg items-center gap-1.5 rounded-xl border border-border/80 bg-card/85 p-1.5 shadow-xl shadow-black/10 backdrop-blur-xl"
+              className="mx-auto mt-8 flex max-w-md items-center gap-1.5 rounded-full border border-border/90 bg-card/85 p-1.5 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors focus-within:border-primary/50"
             >
-              <Search className="ml-2.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(event) => {
@@ -97,101 +101,119 @@ export default function HomePage() {
                 className="mono h-9 border-0 bg-transparent px-2 text-sm shadow-none focus-visible:ring-0"
                 aria-label={t('home.searchPlaceholder')}
               />
-              <Button type="submit" size="sm" disabled={checking} className="h-9 shrink-0 px-4">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={checking}
+                className="h-8 shrink-0 rounded-full px-4"
+              >
                 {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('home.check')}
               </Button>
             </form>
 
             {availability && (
-              <div className="mx-auto mt-3 max-w-lg text-left">
+              <div className="mx-auto mt-3 max-w-md text-left">
                 {availability.available ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-success/35 bg-success/10 px-4 py-2.5 text-sm text-success">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-success/30 bg-success/10 px-4 py-2.5 text-xs text-success">
                     <span className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
                       <span className="mono font-medium">{availability.tld}</span> —{' '}
                       {t('home.available')}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <Button asChild size="sm" variant="outline">
+                      <Button asChild size="sm" variant="outline" className="h-7 rounded-full px-3">
                         <Link href={`/register?tld=${encodeURIComponent(availability.tld)}`}>
                           В блокчейне
                         </Link>
                       </Button>
-                      <Button asChild size="sm" variant="success">
+                      <Button asChild size="sm" variant="success" className="h-7 rounded-full px-3">
                         <Link href="/store">Купить</Link>
                       </Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-destructive/35 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                  <div className="flex items-center justify-between gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-xs text-destructive">
                     <span className="flex items-center gap-2">
                       <CircleAlert className="h-4 w-4 shrink-0" />
                       <span className="mono font-medium">{availability.tld}</span> —{' '}
                       {describeReason(availability.reason, language)}
                     </span>
-                    <Button asChild size="sm" variant="outline">
+                    <Button asChild size="sm" variant="outline" className="h-7 rounded-full px-3">
                       <Link href={`/zone/${availability.tld}`}>{t('common.openZone')}</Link>
                     </Button>
                   </div>
                 )}
               </div>
             )}
-            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+            {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Button asChild size="lg">
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+              <Button asChild size="lg" className="rounded-full px-6">
                 <Link href="/store">
-                  Открыть магазин <ArrowRight className="h-4 w-4" />
+                  Открыть магазин <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg" variant="outline" className="rounded-full px-6">
                 <Link href="/zones">{t('home.ctaExplore')}</Link>
               </Button>
             </div>
           </div>
+
+          {/* Живое минималистичное превью окна — в стиле нового логотипа */}
+          <div className="mx-auto mt-14 max-w-2xl">
+            <div className="overflow-hidden rounded-2xl border border-border/75 bg-card/60 shadow-2xl shadow-black/25 backdrop-blur-xl">
+              <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/20" />
+                </div>
+                <div className="mono flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-[11px] text-muted-foreground">
+                  <Lock className="h-3 w-3 text-success" />
+                  <span>
+                    https://<span className="text-foreground">{previewZone || 'brand'}</span>
+                    .justtld.online
+                  </span>
+                </div>
+                <span className="text-[11px] text-muted-foreground">SSL</span>
+              </div>
+
+              <div className="grid gap-4 p-6 sm:grid-cols-3 sm:divide-x sm:divide-border/50">
+                <div className="space-y-1 sm:pr-4">
+                  <div className="text-xs text-muted-foreground">Всего зон</div>
+                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
+                    {stats.data ? formatNumber(stats.data.total, language) : '—'}
+                  </div>
+                </div>
+                <div className="space-y-1 sm:px-4">
+                  <div className="text-xs text-muted-foreground">Активных сайтов</div>
+                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
+                    {stats.data ? formatNumber(stats.data.active, language) : '—'}
+                  </div>
+                </div>
+                <div className="space-y-1 sm:pl-4">
+                  <div className="text-xs text-muted-foreground">Владельцев</div>
+                  <div className="text-2xl font-semibold tracking-tight tabular-nums">
+                    {stats.data ? formatNumber(stats.data.uniqueOwners, language) : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Компактная статистика */}
-      <section className="border-b border-border/40 bg-card/25">
-        <div className="container grid grid-cols-3 divide-x divide-border/50 py-6 text-center">
-          <div>
-            <div className="text-2xl font-semibold tracking-tight tabular-nums">
-              {stats.data ? formatNumber(stats.data.total, language) : '—'}
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{t('home.totalZones')}</div>
-          </div>
-          <div>
-            <div className="text-2xl font-semibold tracking-tight tabular-nums">
-              {stats.data ? formatNumber(stats.data.active, language) : '—'}
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{t('home.activeZones')}</div>
-          </div>
-          <div>
-            <div className="text-2xl font-semibold tracking-tight tabular-nums">
-              {stats.data ? formatNumber(stats.data.uniqueOwners, language) : '—'}
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{t('home.owners')}</div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3 ключевые возможности — чисто и без лишнего шума */}
-      <section className="container py-14">
-        <div className="grid gap-4 md:grid-cols-3">
+      {/* Чистая 3-колоночная сетка без лишних рамок */}
+      <section className="border-y border-border/50 bg-card/20">
+        <div className="container grid divide-y divide-border/50 md:grid-cols-3 md:divide-x md:divide-y-0">
           {[
             { icon: Sparkles, title: t('home.step1.title'), text: t('home.step1.text') },
             { icon: Globe2, title: t('home.step2.title'), text: t('home.step2.text') },
             { icon: Layers, title: t('home.step3.title'), text: t('home.step3.text') },
           ].map((step) => (
-            <div
-              key={step.title}
-              className="rounded-xl border border-border/60 bg-card/50 p-6 transition-colors hover:border-border"
-            >
-              <div className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 bg-secondary/70 text-primary">
-                <step.icon className="h-4 w-4" />
-              </div>
-              <h3 className="text-sm font-semibold tracking-tight">{step.title}</h3>
+            <div key={step.title} className="py-8 md:px-8 first:md:pl-0 last:md:pr-0">
+              <step.icon className="mb-3 h-4 w-4 text-primary" />
+              <h3 className="text-sm font-medium tracking-tight">{step.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.text}</p>
             </div>
           ))}
@@ -199,9 +221,11 @@ export default function HomePage() {
       </section>
 
       {/* Последние зоны */}
-      <section className="container pb-16">
+      <section className="container py-14">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">{t('home.recent')}</h2>
+          <h2 className="text-base font-medium tracking-tight text-muted-foreground">
+            {t('home.recent')}
+          </h2>
           <Button asChild variant="ghost" size="sm">
             <Link href="/zones">
               {t('nav.zones')} <ArrowRight className="h-3.5 w-3.5" />
@@ -222,11 +246,9 @@ export default function HomePage() {
             ))}
           </div>
         ) : (
-          <Card className="mt-4">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              {t('zones.emptyTitle')}. {t('zones.emptyText')}
-            </CardContent>
-          </Card>
+          <div className="mt-4 rounded-xl border border-border/60 p-8 text-center text-sm text-muted-foreground">
+            {t('zones.emptyTitle')}. {t('zones.emptyText')}
+          </div>
         )}
       </section>
     </div>

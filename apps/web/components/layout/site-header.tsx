@@ -75,43 +75,45 @@ export function SiteHeader() {
   );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-      <div className="container flex h-14 items-center gap-4">
-        <Link href="/" className="group flex shrink-0 items-center gap-2.5 font-semibold">
-          <img
-            src="/brand/icon.png"
-            alt="JustTLD"
-            width={28}
-            height={28}
-            className="h-7 w-7 rounded-lg ring-1 ring-white/10 transition-transform duration-150 group-hover:scale-105"
-          />
-          <span className="text-[16px] font-semibold tracking-tight">
-            Just<span className="brand-text-gradient">TLD</span>
-          </span>
-        </Link>
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/75 backdrop-blur-xl">
+      <div className="container flex h-14 items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="group flex shrink-0 items-center gap-2.5">
+            <img
+              src="/brand/icon.png"
+              alt="JustTLD"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-[6px] ring-1 ring-white/15 transition-transform duration-150 group-hover:scale-[1.03]"
+            />
+            <span className="text-[15px] font-semibold tracking-tight">
+              Just<span className="brand-text-gradient">TLD</span>
+            </span>
+          </Link>
 
-        <nav className="ml-2 hidden items-center gap-1 md:flex">
-          {navItems.map((item) => {
-            const active =
-              pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm transition-colors',
-                  active
-                    ? 'bg-secondary font-medium text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t(item.key)}
-              </Link>
-            );
-          })}
-        </nav>
+          <nav className="hidden items-center gap-1 md:flex">
+            {navItems.map((item) => {
+              const active =
+                pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    'rounded-md px-2.5 py-1.5 text-[13px] transition-colors',
+                    active
+                      ? 'font-medium text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t(item.key)}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -119,7 +121,7 @@ export function SiteHeader() {
             onClick={() => setLanguage(language === 'ru' ? 'en' : 'ru')}
             title={language === 'ru' ? 'Switch to English' : 'Переключить на русский'}
           >
-            <span className="flex items-center gap-0.5 text-[11px] font-semibold uppercase">
+            <span className="flex items-center gap-0.5 text-[11px] font-medium uppercase">
               <Globe className="h-3.5 w-3.5" />
               {language}
             </span>
@@ -132,17 +134,17 @@ export function SiteHeader() {
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
           >
             {mounted && resolvedTheme === 'dark' ? (
-              <Sun className="h-4 w-4" />
+              <Sun className="h-3.5 w-3.5" />
             ) : (
-              <Moon className="h-4 w-4" />
+              <Moon className="h-3.5 w-3.5" />
             )}
           </Button>
 
-          <div className="hidden sm:block">
+          <div className="ml-1 hidden sm:block">
             <ConnectWallet />
           </div>
 
-          <div className="sm:hidden">
+          <div className="ml-1 sm:hidden">
             <ConnectWallet compact />
           </div>
 
@@ -159,8 +161,8 @@ export function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-border/60 bg-background/95 backdrop-blur-xl md:hidden">
-          <nav className="container flex flex-col gap-1 py-3">
+        <div className="border-t border-border/50 bg-background/95 backdrop-blur-xl md:hidden">
+          <nav className="container flex flex-col gap-0.5 py-2.5">
             <Link
               href="/"
               onClick={() => setMobileOpen(false)}

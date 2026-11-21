@@ -16,9 +16,9 @@ export function SiteFooter() {
           <img
             src="/brand/icon.png"
             alt="JustTLD"
-            width={22}
-            height={22}
-            className="h-5 w-5 rounded-md ring-1 ring-white/10"
+            width={20}
+            height={20}
+            className="h-5 w-5 rounded-[5px] ring-1 ring-white/15"
           />
           <span className="font-medium text-foreground">
             Just<span className="brand-text-gradient">TLD</span>
@@ -42,7 +42,7 @@ export function SiteFooter() {
             {t('nav.admin')}
           </Link>
           {data?.contract ? (
-            <span className="mono opacity-75">
+            <span className="mono opacity-70">
               chain {data.chain.id} · {data.contract.address.slice(0, 8)}…
             </span>
           ) : null}
