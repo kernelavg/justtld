@@ -220,64 +220,50 @@ export default function StorePage() {
   const customUsdt = catalog ? Number(catalog.pricing.customZonePriceUsdt.toFixed(2)) : 0;
 
   return (
-    <div className="container space-y-8 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="container max-w-5xl space-y-8 py-10">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border/50 pb-6">
         <div>
-          <Badge variant="outline" className="mb-2 gap-1.5">
-            <ShoppingBag className="h-3.5 w-3.5 text-primary" />
-            Официальная витрина JustTLD
-          </Badge>
-          <h1 className="text-3xl font-bold tracking-tight">Магазин зон, сайтов и DNS</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Купите доменную зону за рубли (ЮMoney) или криптовалюту (@CryptoBot), загрузите свой
-            сайт во встроенный хостинг или настройте реальные DNS-записи.
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Магазин зон</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Оплата в рублях или USDT · мгновенный запуск сайта и DNS.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {sessionState?.account ? (
-            <Badge variant="success" className="px-3 py-1.5">
-              Аккаунт: {sessionState.account.email}
+            <Badge variant="success" className="px-3 py-1 text-xs">
+              {sessionState.account.email}
             </Badge>
           ) : sessionState?.session ? (
-            <Badge variant="success" className="mono px-3 py-1.5">
-              Сессия: {sessionState.session.address.slice(0, 10)}…
+            <Badge variant="success" className="mono px-3 py-1 text-xs">
+              {sessionState.session.address.slice(0, 10)}…
             </Badge>
           ) : (
-            <Badge variant="warning" className="px-3 py-1.5">
-              Войдите для оформления заказа
+            <Badge variant="outline" className="px-3 py-1 text-xs text-muted-foreground">
+              Для оплаты войдите в аккаунт
             </Badge>
           )}
         </div>
       </div>
 
       {!isAuthenticated && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="mx-auto max-w-md space-y-3">
           <EmailAuthCard
-            title="Быстрый вход или регистрация по Email"
-            description="После входа вы сможете сразу оплатить зону в рублях или USDT и управлять сайтом в личном кабинете."
+            title="Вход или регистрация"
+            description="Войдите через Google или Email, чтобы покупать зоны и управлять сайтом."
+            googleAuthEnabled={sessionState?.googleAuthEnabled}
             onSuccess={() => void loadAll()}
           />
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Или вход через криптокошелёк</CardTitle>
-              <CardDescription>
-                Если вы уже пользуетесь MetaMask / WalletConnect в JustTLD, просто подтвердите
-                подписью.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Текущий подключённый кошелёк:{' '}
-                <span className="mono text-foreground">
-                  {wallet.address ?? 'не подключён'}
-                </span>
-              </p>
-              <Button onClick={() => void startWalletSignIn()} disabled={!wallet.address}>
-                Подтвердить вход кошельком
+          {wallet.address && (
+            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card/60 px-4 py-2.5 text-xs">
+              <span className="mono text-muted-foreground">
+                Кошелёк: {wallet.address.slice(0, 10)}…
+              </span>
+              <Button size="sm" variant="outline" onClick={() => void startWalletSignIn()}>
+                Войти подписью
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          )}
         </div>
       )}
 

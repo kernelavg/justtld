@@ -9,17 +9,14 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
 import { ConnectWallet } from '@/components/wallet/connect-wallet';
+import { getSession } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-const NAV: Array<{ href: string; key: TranslationKey }> = [
-  { href: '/', key: 'nav.home' },
+const BASE_NAV: Array<{ href: string; key: TranslationKey }> = [
   { href: '/store', key: 'nav.store' },
   { href: '/zones', key: 'nav.zones' },
   { href: '/subdomains', key: 'nav.subdomains' },
-  { href: '/register', key: 'nav.register' },
   { href: '/dashboard', key: 'nav.dashboard' },
-  { href: '/admin', key: 'nav.admin' },
-  { href: '/docs', key: 'nav.docs' },
 ];
 
 const GOOGLE_AUTH_ERRORS: Record<string, string> = {
@@ -39,9 +36,14 @@ export function SiteHeader() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [isAdmin, setIsAdmin] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
+    getSession()
+      .then((res) => setIsAdmin(res.session?.role === 'admin'))
+      .catch(() => undefined);
+
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const auth = params.get('auth');
@@ -67,24 +69,29 @@ export function SiteHeader() {
     }
   }, []);
 
+  const navItems = React.useMemo(
+    () => (isAdmin ? [...BASE_NAV, { href: '/admin', key: 'nav.admin' as const }] : BASE_NAV),
+    [isAdmin],
+  );
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-xl">
-      <div className="container flex h-16 items-center gap-3">
-        <Link href="/" className="group flex items-center gap-2.5 font-semibold">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+      <div className="container flex h-14 items-center gap-4">
+        <Link href="/" className="group flex shrink-0 items-center gap-2.5 font-semibold">
           <img
             src="/brand/icon.png"
             alt="JustTLD"
-            width={32}
-            height={32}
-            className="h-8 w-8 rounded-lg shadow-sm ring-1 ring-white/10 transition-transform duration-150 group-hover:scale-105"
+            width={28}
+            height={28}
+            className="h-7 w-7 rounded-lg ring-1 ring-white/10 transition-transform duration-150 group-hover:scale-105"
           />
-          <span className="text-[17px] font-bold tracking-tight">
+          <span className="text-[16px] font-semibold tracking-tight">
             Just<span className="brand-text-gradient">TLD</span>
           </span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
-          {NAV.map((item) => {
+        <nav className="ml-2 hidden items-center gap-1 md:flex">
+          {navItems.map((item) => {
             const active =
               pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
             return (
@@ -92,10 +99,10 @@ export function SiteHeader() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm transition-colors hover:bg-secondary/80 hover:text-foreground',
+                  'rounded-lg px-3 py-1.5 text-sm transition-colors',
                   active
-                    ? 'bg-secondary font-medium text-foreground shadow-sm ring-1 ring-border/70'
-                    : 'text-muted-foreground',
+                    ? 'bg-secondary font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {t(item.key)}
@@ -112,8 +119,8 @@ export function SiteHeader() {
             onClick={() => setLanguage(language === 'ru' ? 'en' : 'ru')}
             title={language === 'ru' ? 'Switch to English' : 'Переключить на русский'}
           >
-            <span className="flex items-center gap-1 text-xs font-semibold uppercase">
-              <Globe className="h-4 w-4" />
+            <span className="flex items-center gap-0.5 text-[11px] font-semibold uppercase">
+              <Globe className="h-3.5 w-3.5" />
               {language}
             </span>
           </Button>
@@ -142,7 +149,7 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="md:hidden"
             aria-label="Menu"
             onClick={() => setMobileOpen((value) => !value)}
           >
@@ -152,30 +159,33 @@ export function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-border/60 bg-background/95 backdrop-blur-xl lg:hidden">
+        <div className="border-t border-border/60 bg-background/95 backdrop-blur-xl md:hidden">
           <nav className="container flex flex-col gap-1 py-3">
-            {NAV.map((item) => {
-              const active =
-                pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={cn(
-                    'rounded-lg px-3 py-2 text-sm transition-colors',
-                    active
-                      ? 'bg-secondary font-medium text-foreground'
-                      : 'text-muted-foreground hover:bg-secondary/60',
-                  )}
-                >
-                  {t(item.key)}
-                </Link>
-              );
-            })}
-            <div className="px-2 pt-2 sm:hidden">
-              <ConnectWallet />
-            </div>
+            <Link
+              href="/"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                'rounded-lg px-3 py-2 text-sm',
+                pathname === '/' ? 'bg-secondary font-medium text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {t('nav.home')}
+            </Link>
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'rounded-lg px-3 py-2 text-sm',
+                  pathname === item.href || pathname.startsWith(item.href)
+                    ? 'bg-secondary font-medium text-foreground'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {t(item.key)}
+              </Link>
+            ))}
           </nav>
         </div>
       )}

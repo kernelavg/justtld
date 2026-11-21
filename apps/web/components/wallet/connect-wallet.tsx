@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ChevronDown, Copy, LogOut, Mail, Wallet, FlaskConical, Smartphone } from 'lucide-react';
+import { ChevronDown, Copy, FlaskConical, LogOut, Mail, Smartphone, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { shortenAddress } from '@justtld/shared';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,6 @@ export function ConnectWallet({
   compact = false,
 }: {
   className?: string;
-  /** Только иконка — для узких экранов, где подпись не помещается. */
   compact?: boolean;
 }) {
   const { t } = useI18n();
@@ -33,7 +32,26 @@ export function ConnectWallet({
   const [devOpen, setDevOpen] = React.useState(false);
   const [devAccounts, setDevAccounts] = React.useState<DevWalletAccount[]>([]);
   const [devError, setDevError] = React.useState<string | null>(null);
+  const rootRef = React.useRef<HTMLDivElement>(null);
   const devEnabled = process.env.NEXT_PUBLIC_ENABLE_DEV_WALLET !== 'false';
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   const openDevDialog = async () => {
     setDevOpen(true);
@@ -54,20 +72,20 @@ export function ConnectWallet({
 
   if (wallet.status === 'connected' && wallet.address) {
     return (
-      <div className={cn('flex items-center gap-1', className)}>
+      <div className={cn('relative flex items-center gap-1', className)}>
         <Button
           variant="outline"
           size="sm"
           onClick={copyAddress}
-          className={cn('mono gap-2', compact && 'px-2')}
+          className={cn('mono gap-2', compact && 'px-2.5')}
           aria-label={wallet.address}
         >
           <span
-            className={cn('h-2 w-2 rounded-full', wallet.error ? 'bg-warning' : 'bg-success')}
+            className={cn('h-1.5 w-1.5 rounded-full', wallet.error ? 'bg-warning' : 'bg-success')}
           />
-          {compact ? null : shortenAddress(wallet.address)}
+          {compact ? shortenAddress(wallet.address, 2) : shortenAddress(wallet.address)}
           {wallet.kind === 'dev' ? <FlaskConical className="h-3 w-3" /> : null}
-          {compact ? null : <Copy className="h-3 w-3 opacity-60" />}
+          {compact ? null : <Copy className="h-3 w-3 opacity-50" />}
         </Button>
         <Button
           variant="ghost"
@@ -75,43 +93,44 @@ export function ConnectWallet({
           aria-label={t('common.disconnect')}
           onClick={wallet.disconnect}
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-3.5 w-3.5" />
         </Button>
       </div>
     );
   }
 
   return (
-    <div className={className}>
+    <div ref={rootRef} className={cn('relative', className)}>
       <Button
         size="sm"
+        variant="outline"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-label={compact ? t('common.connectWallet') : undefined}
         title={compact ? t('common.connectWallet') : undefined}
         disabled={wallet.status === 'connecting'}
       >
-        <Wallet className="h-4 w-4" />
+        <Wallet className="h-3.5 w-3.5" />
         {compact
-          ? null
+          ? 'Войти'
           : wallet.status === 'connecting'
             ? t('common.loading')
-            : t('common.connectWallet')}
-        {compact ? null : <ChevronDown className="h-3 w-3 opacity-70" />}
+            : 'Войти'}
+        <ChevronDown className="h-3 w-3 opacity-60" />
       </Button>
 
       {open && (
-        <div className="absolute right-4 z-50 mt-2 w-72 rounded-xl border border-border/80 bg-card/95 p-2 shadow-xl backdrop-blur-xl">
+        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-border/80 bg-card/95 p-1.5 shadow-2xl backdrop-blur-xl">
           <Link
             href="/dashboard"
             onClick={() => setOpen(false)}
-            className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+            className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary/80"
           >
-            <span className="flex items-center gap-1.5 font-medium">
-              <Mail className="h-3.5 w-3.5 text-primary" /> Google / Email вход
+            <span className="flex items-center gap-2 font-medium">
+              <Mail className="h-3.5 w-3.5 text-primary" /> Google или Email
             </span>
             <span className="text-xs text-muted-foreground">
-              Личный кабинет, сайты и покупки без кошелька
+              Быстрый вход без криптокошелька
             </span>
           </Link>
 
@@ -119,7 +138,7 @@ export function ConnectWallet({
 
           <button
             type="button"
-            className="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+            className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary/80"
             onClick={async () => {
               setOpen(false);
               await wallet.connectInjected();
@@ -134,17 +153,17 @@ export function ConnectWallet({
           {wallet.hasWalletConnect && (
             <button
               type="button"
-              className="flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+              className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary/80"
               onClick={async () => {
                 setOpen(false);
                 await wallet.connectWalletConnect();
               }}
             >
-              <span className="flex items-center gap-1 font-medium">
+              <span className="flex items-center gap-1.5 font-medium">
                 <Smartphone className="h-3.5 w-3.5" /> MetaMask на телефоне
               </span>
               <span className="text-xs text-muted-foreground">
-                WalletConnect: QR-код или открыть приложение
+                WalletConnect QR или приложение
               </span>
             </button>
           )}
@@ -152,17 +171,17 @@ export function ConnectWallet({
           {devEnabled && (
             <button
               type="button"
-              className="flex w-full flex-col items-start gap-1 rounded-md px-3 py-2 text-left text-sm hover:bg-accent"
+              className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-secondary/80"
               onClick={() => {
                 setOpen(false);
                 void openDevDialog();
               }}
             >
-              <span className="flex items-center gap-1 font-medium">
+              <span className="flex items-center gap-1.5 font-medium">
                 <FlaskConical className="h-3.5 w-3.5" /> {t('common.devWallet')}
               </span>
               <span className="text-xs text-muted-foreground">
-                Тестовые аккаунты Hardhat (chainId 31337)
+                Тестовые аккаунты Hardhat
               </span>
             </button>
           )}
@@ -184,9 +203,7 @@ export function ConnectWallet({
           <DialogHeader>
             <DialogTitle>{t('common.devWallet')}</DialogTitle>
             <DialogDescription>
-              Публичные тестовые аккаунты Hardhat для локальной сети. Ключи известны всем — никогда
-              не используйте их с реальными средствами. Подпись транзакции выполняется локально в
-              браузере.
+              Публичные тестовые аккаунты Hardhat для локальной сети.
             </DialogDescription>
           </DialogHeader>
 
@@ -198,7 +215,7 @@ export function ConnectWallet({
                 <button
                   key={account.address}
                   type="button"
-                  className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-accent"
+                  className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm hover:bg-secondary/70"
                   onClick={async () => {
                     setDevOpen(false);
                     await wallet.connectDev(index);

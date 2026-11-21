@@ -6,28 +6,25 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium tracking-[-0.01em] transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium tracking-[-0.01em] transition-all duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground shadow-sm shadow-primary/25 hover:bg-primary/90 hover:shadow-md hover:shadow-primary/30',
-        secondary:
-          'border border-border/70 bg-secondary/90 text-secondary-foreground hover:bg-secondary',
+          'bg-primary text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-primary/90',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         outline:
-          'border border-border/80 bg-background/60 backdrop-blur-sm hover:border-primary/40 hover:bg-accent/60 hover:text-foreground',
-        ghost: 'hover:bg-secondary/80 hover:text-foreground',
-        destructive:
-          'bg-destructive text-destructive-foreground shadow-sm shadow-destructive/20 hover:bg-destructive/90',
-        success:
-          'bg-success text-success-foreground shadow-sm shadow-success/20 hover:bg-success/90',
+          'border border-border/80 bg-transparent text-foreground hover:border-border hover:bg-secondary/60',
+        ghost: 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        success: 'bg-success text-success-foreground hover:bg-success/90',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-10 px-4 py-2',
+        default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-lg px-3 text-xs',
-        lg: 'h-11 rounded-xl px-6 text-sm font-semibold',
-        icon: 'h-9 w-9 rounded-lg',
+        lg: 'h-10 rounded-lg px-5 text-sm font-medium',
+        icon: 'h-8 w-8 rounded-lg',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },

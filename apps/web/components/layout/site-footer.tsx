@@ -10,39 +10,42 @@ export function SiteFooter() {
   const { data } = useApiData<ContractsInfo>('/api/contracts');
 
   return (
-    <footer className="border-t border-border/60 bg-card/30 backdrop-blur-sm">
-      <div className="container flex flex-col gap-4 py-8 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
+    <footer className="border-t border-border/50 bg-background">
+      <div className="container flex flex-col gap-4 py-8 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2.5">
           <img
             src="/brand/icon.png"
             alt="JustTLD"
-            width={28}
-            height={28}
-            className="h-7 w-7 rounded-lg ring-1 ring-white/10"
+            width={22}
+            height={22}
+            className="h-5 w-5 rounded-md ring-1 ring-white/10"
           />
-          <div>
-            <div className="font-semibold text-foreground">
-              Just<span className="brand-text-gradient">TLD</span>
-            </div>
-            <div className="text-xs">{t('app.tagline')}</div>
-          </div>
+          <span className="font-medium text-foreground">
+            Just<span className="brand-text-gradient">TLD</span>
+          </span>
+          <span className="hidden sm:inline">· {t('app.tagline')}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <Link href="/store" className="transition-colors hover:text-foreground">
             {t('nav.store')}
           </Link>
+          <Link href="/register" className="transition-colors hover:text-foreground">
+            {t('nav.register')}
+          </Link>
           <Link href="/docs" className="transition-colors hover:text-foreground">
-            API / Docs
+            API
           </Link>
           <Link href="/explorer" className="transition-colors hover:text-foreground">
             {t('nav.explorer')}
           </Link>
-          <span className="mono rounded-md border border-border/60 bg-secondary/50 px-2 py-0.5 text-xs">
-            chain {data?.chain.id ?? 31337}
-            {data?.contract
-              ? ` · ${data.contract.address.slice(0, 10)}…`
-              : ' · контракт не развёрнут'}
-          </span>
+          <Link href="/admin" className="transition-colors hover:text-foreground">
+            {t('nav.admin')}
+          </Link>
+          {data?.contract ? (
+            <span className="mono opacity-75">
+              chain {data.chain.id} · {data.contract.address.slice(0, 8)}…
+            </span>
+          ) : null}
         </div>
       </div>
     </footer>
