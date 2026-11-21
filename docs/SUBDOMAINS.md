@@ -126,6 +126,23 @@ node scripts/setup-zone-hosts.mjs justtld-demo
 node scripts/setup-zone-hosts.mjs --all        # все зоны из /api/zones
 ```
 
+**Статус: не включено.** Проверка на живом аккаунте (ноябрь 2026) упёрлась в две вещи, которых
+на бесплатном тарифе нет:
+
+1. создание зоны требует права уровня аккаунта (`com.cloudflare.api.account.zone.create`);
+   токен со правами на все зоны (`Zone:Edit`, `DNS:Edit`, `Transform Rules:Edit`,
+   `Origin Rules:Edit`) всё равно получает отказ;
+2. подмена `Host` в Origin Rules — платная функция: API отвечает
+   `not entitled to use the HostHeader override`, без неё Render не примет запрос;
+   вместо неё нужен Worker-прокси (бесплатные 100 тыс. запросов в сутки), который сам ходит
+   на `justtld.onrender.com` и передаёт исходное имя в `X-Forwarded-Host`.
+
+Плюс поправка по фазам: заголовок запроса меняется в `http_request_late_transform`, а не в
+`http_request_transform` (оттуда ответ `header rewrites not allowed`).
+
+Поэтому включёнными остаются три формы без второго уровня: `/зона/метка`, `метка--зона`, `зона.домен/метка`.
+Скрипт ниже оставлен как заготовка на случай, если понадобятся настоящие хосты второго уровня.
+
 Скрипту нужен токен Cloudflare (My Profile → API Tokens → Create Custom Token) с правами:
 
 | Разрешение в дашборде | API-имя | Зачем |
