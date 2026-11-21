@@ -8,9 +8,14 @@
  *   node scripts/test-resolver.mjs [http://127.0.0.1:3300] [localtest.dev]
  */
 import http from 'node:http';
+import https from 'node:https';
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:3300';
 const DOMAIN = process.argv[3] ?? 'localtest.dev';
+const baseUrl = new URL(BASE);
+// Если проверяем настоящий домен (DNS настроен), идём прямо по адресам поддоменов.
+// Локально DNS нет — тогда тот же сервер вызывается с подменённым заголовком Host.
+const viaDns = baseUrl.hostname === DOMAIN || baseUrl.hostname.endsWith(`.${DOMAIN}`);
 
 let failures = 0;
 
@@ -19,9 +24,19 @@ let failures = 0;
  * он позволяет выставить любой host, как будто запрос пришёл на другой домен.
  */
 function fetchHost(host, path = '/') {
-  const url = new URL(BASE);
+  if (viaDns) {
+    return fetch(`${baseUrl.protocol}//${host}${path}`, { redirect: 'manual' }).then(
+      async (response) => ({
+        status: response.status,
+        location: response.headers.get('location') ?? undefined,
+        body: await response.text(),
+      }),
+    );
+  }
+  const url = baseUrl;
+  const client = url.protocol === 'https:' ? https : http;
   return new Promise((resolve, reject) => {
-    const request = http.request(
+    const request = client.request(
       {
         host: url.hostname,
         port: url.port,

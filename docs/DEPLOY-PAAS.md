@@ -281,6 +281,8 @@ curl -s https://freename.justtld.вашдомен | grep -o 'Зона свобо
 curl -sI https://justtld-demo.justtld.вашдомен | grep -i '^location'
 # служебные поддомены не перехватываются
 curl -sI https://www.justtld.вашдомен | head -1              # 200, главная сайта
+# всё то же одним скриптом (сам определит, что домен настоящий, и пойдёт по DNS)
+npm run test:resolver -- https://justtld.вашдомен justtld.вашдомен
 ```
 
 Локально то же самое без DNS — скрипт подставляет заголовок `Host`:
