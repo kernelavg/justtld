@@ -31,6 +31,10 @@ services:
         value: '055cff572497d6ab387c7d49e3288026'
       - key: NEXT_PUBLIC_APP_URL
         value: https://justtld.onrender.com
+      # Домен, на поддоменах которого работает резолвер имён (myzone.<домен>).
+      # Пусто = резолвер выключен. Задаётся в дашборде: Settings → Environment.
+      - key: RESOLVER_DOMAIN
+        sync: false
       # ── база ──
       - key: DATABASE_URL
         sync: false

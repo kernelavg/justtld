@@ -7,8 +7,30 @@ import { NextResponse, type NextRequest } from 'next/server';
  *  - запрет кэширования API,
  *  - блокировка небезопасных методов с чужого Origin (дополнительно к проверке в route-handlers).
  */
+/** Возвращает имя зоны, если запрос пришёл на поддомен резолвера: myzone.example.com → myzone */
+function resolverZone(request: NextRequest): string | null {
+  const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
+  if (!base) return null;
+  const host = (request.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? '';
+  if (!host.endsWith(`.${base}`)) return null;
+  const label = host.slice(0, -(base.length + 1));
+  if (!label || label.includes('.')) return null;
+  if (['www', 'api', 'admin', 'app'].includes(label)) return null;
+  return label;
+}
+
 export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== 'production';
+
+  // Резолвер: myzone.вашдомен → страница зоны (переписывание адреса, без редиректа).
+  const zone = resolverZone(request);
+  if (zone && request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/resolve';
+    url.search = `?zone=${encodeURIComponent(zone)}`;
+    return NextResponse.rewrite(url);
+  }
+
   const response = NextResponse.next();
 
   // WalletConnect v2: relay идёт по websocket, модалка грузит шрифты и картинку QR с reown.com.

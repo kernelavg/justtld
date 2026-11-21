@@ -53,7 +53,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p contracts/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "typecheck:web": "tsc -p apps/web/tsconfig.json --noEmit",
     "clean": "rm -rf node_modules apps/web/.next packages/*/dist",
-    "test:walletconnect": "node scripts/test-walletconnect.mjs"
+    "test:walletconnect": "node scripts/test-walletconnect.mjs",
+    "test:resolver": "node scripts/test-resolver.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
