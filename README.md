@@ -1,28 +1,50 @@
-# JustTLD
+<div align="center">
+  <img src="apps/web/public/brand/logo-wide.png" alt="JustTLD" width="380" />
+  <h1>JustTLD</h1>
+  <p><strong>Собственные доменные зоны (.myzone), Handshake-аукционы, встроенный хостинг сайтов и DNS.</strong></p>
 
-**«Создай свою зону. Владей своим пространством.»**
+  <p>
+    <a href="https://justtld.online"><img src="https://img.shields.io/badge/Сайт-justtld.online-111827?style=for-the-badge&logo=googlechrome&logoColor=white" alt="justtld.online" /></a>
+    <a href="https://t.me/JustTLD"><img src="https://img.shields.io/badge/Telegram-@JustTLD-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram @JustTLD" /></a>
+    <a href="https://github.com/kernelavg/justtld/releases/latest"><img src="https://img.shields.io/badge/Android_APK-v1.0.1-3DDC84?style=for-the-badge&logo=android&logoColor=black" alt="JustTLD APK" /></a>
+    <a href="https://justtld.online/auctions"><img src="https://img.shields.io/badge/Аукционы-Handshake-F59E0B?style=for-the-badge" alt="Auctions" /></a>
+  </p>
+
+  <p>
+    <a href="https://justtld.online/zones">Регистрация за газ</a> ·
+    <a href="https://justtld.online/store">Магазин от 99 ₽</a> ·
+    <a href="https://justtld.online/auctions">Аукционы зон</a> ·
+    <a href="https://justtld.duckdns.org">Зеркало</a> ·
+    <a href="https://t.me/JustTLD">Канал @JustTLD</a>
+  </p>
+</div>
+
+---
 
 [![CI](https://github.com/kernelavg/justtld/actions/workflows/ci.yml/badge.svg)](https://github.com/kernelavg/justtld/actions/workflows/ci.yml)
 [![Integration](https://github.com/kernelavg/justtld/actions/workflows/integration.yml/badge.svg)](https://github.com/kernelavg/justtld/actions/workflows/integration.yml)
+[![Android APK](https://github.com/kernelavg/justtld/actions/workflows/android-apk.yml/badge.svg)](https://github.com/kernelavg/justtld/actions/workflows/android-apk.yml)
 
-> **Живой деплой в Sepolia (chainId 11155111).**
+> **Платформа работает в проде (Ethereum Sepolia + облачная инфраструктура):**
 >
-> | | |
+> | Сервис / компонент | Адрес |
 > | --- | --- |
-> | Контракт | [`0x040e0F550dE73Aa796131A3C503B0189303CB298`](https://sepolia.etherscan.io/address/0x040e0F550dE73Aa796131A3C503B0189303CB298#code) — Source Code Verified |
-> | Владелец / админ | [`0x2ba51777889785cC53871463Bf8e4db95Fc8d886`](https://sepolia.etherscan.io/address/0x2ba51777889785cC53871463Bf8e4db95Fc8d886) |
-> | Sourcify | [exact_match](https://repo.sourcify.dev/contracts/11155111/0x040e0F550dE73Aa796131A3C503B0189303CB298) (creation + runtime) |
-> | Публичный сайт (PaaS) | **https://justtld.onrender.com** — Next.js + PostgreSQL (Neon) + indexer в одном контейнере |
-> | Публичная страница | https://justtld.infinityfreeapp.com — статика без сервера, регистрация зон из браузера |
-> | Деплой / проверка | `npm run deploy:sepolia`, `npm run verify:sepolia` |
+> | **Основной сайт** | **https://justtld.online** (Next.js 15 + PostgreSQL Neon + автохостинг поддоменов) |
+> | **Telegram-канал проекта** | **[@JustTLD](https://t.me/JustTLD)** — новости, дропы редких зон, аукционы |
+> | **Магазин и аукционы** | [Магазин зон и поддоменов](https://justtld.online/store) · [Handshake-аукционы](https://justtld.online/auctions) |
+> | **Android-приложение** | [`JustTLD.apk v1.0.1`](https://github.com/kernelavg/justtld/releases/latest) (нативный Kotlin + Google Auth) |
+> | **Резервное зеркало** | https://justtld.duckdns.org · https://gramcoin.duckdns.org |
+> | **Смарт-контракт (Sepolia)** | [`0x040e0F550dE73Aa796131A3C503B0189303CB298`](https://sepolia.etherscan.io/address/0x040e0F550dE73Aa796131A3C503B0189303CB298#code) ([Sourcify exact_match](https://repo.sourcify.dev/contracts/11155111/0x040e0F550dE73Aa796131A3C503B0189303CB298)) |
+> | **Владелец / админ** | [`0x2ba51777889785cC53871463Bf8e4db95Fc8d886`](https://sepolia.etherscan.io/address/0x2ba51777889785cC53871463Bf8e4db95Fc8d886) |
 >
-> Публикация исходников, метрики газа и план перехода на основную сеть: [`docs/PUBLIC-DEPLOY.md`](docs/PUBLIC-DEPLOY.md).
-> Хостинг сайта с базой: [`docs/DEPLOY-PAAS.md`](docs/DEPLOY-PAAS.md).
+> Документация деплоя: [`docs/PUBLIC-DEPLOY.md`](docs/PUBLIC-DEPLOY.md) · [`docs/DEPLOY-PAAS.md`](docs/DEPLOY-PAAS.md).
 
-Децентрализованный реестр верхнеуровневых зон (TLD) на локальной EVM-сети.
-Контракт — источник истины, PostgreSQL — кэш, поиск и история, indexer — мост между ними.
-Всё работает локально, в терминале: без Vercel, без облачных сервисов, без моков.
-Каждая операция подписывается кошельком и попадает в реальный блок.
+### Возможности JustTLD
+- **Регистрация собственной TLD-зоны (`.myzone`)** — ончейн в Sepolia или мгновенная покупка за **₽ (ЮMoney)** / **USDT (`@CryptoBot`)**.
+- **Аукционы зон в стиле Handshake** — любой пользователь может выставить свободную зону на торги, делать ставки с анти-снайпингом (+5 мин) и забирать победу.
+- **Свой сайт и DNS прямо из кабинета** — встроенный редактор файлов сайта и управление записями (`A`, `AAAA`, `CNAME`, `TXT`, `MX`) с автоматическим HTTPS на `*.justtld.online`.
+- **Удобный вход** — Google OAuth 2.0, Email + пароль или Web3-кошелёк (MetaMask / WalletConnect v2).
+- **Android-приложение** — [`JustTLD.apk`](https://github.com/kernelavg/justtld/releases/latest) для удобного доступа с телефона.
 
 ---
 
