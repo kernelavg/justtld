@@ -1,0 +1,2 @@
+-keep class online.justtld.app.** { *; }
+-dontwarn android.webkit.**

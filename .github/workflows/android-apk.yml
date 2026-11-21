@@ -1,0 +1,52 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/android/**'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate release keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore /tmp/justtld-release.jks \
+            -alias justtld \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass justtld2026 -keypass justtld2026 \
+            -dname "CN=JustTLD, O=JustTLD, L=Online, C=RU"
+
+      - name: Build signed release APK
+        working-directory: apps/android
+        env:
+          ANDROID_KEYSTORE_PATH: /tmp/justtld-release.jks
+          ANDROID_KEYSTORE_PASSWORD: justtld2026
+          ANDROID_KEY_ALIAS: justtld
+          ANDROID_KEY_PASSWORD: justtld2026
+        run: gradle assembleRelease --no-daemon
+
+      - name: Upload JustTLD.apk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustTLD-apk
+          path: apps/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

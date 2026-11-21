@@ -13,6 +13,7 @@ export const GET = route(
   async (request) => {
     const url = new URL(request.url);
     const nextPath = sanitizeNextPath(url.searchParams.get('next'), '/store');
+    const appBridge = url.searchParams.get('mode') === 'app';
     const origin = resolvePublicOrigin(request);
 
     if (!googleAuthEnabled()) {
@@ -21,7 +22,7 @@ export const GET = route(
       return Response.redirect(target.toString(), 302);
     }
 
-    const { state, cookieValue } = createGoogleStateCookieValue(nextPath);
+    const { state, cookieValue } = createGoogleStateCookieValue(nextPath, appBridge);
     const redirectUri = `${origin}/api/auth/google/callback`;
 
     const googleUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');

@@ -93,7 +93,10 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
     expect(sanitizeNextPath('//evil.com')).toBe('/store');
 
     const { state, cookieValue } = createGoogleStateCookieValue('/dashboard');
-    expect(verifyGoogleStateCookieValue(cookieValue, state)).toEqual({ next: '/dashboard' });
+    expect(verifyGoogleStateCookieValue(cookieValue, state)).toEqual({
+      next: '/dashboard',
+      appBridge: false,
+    });
     expect(verifyGoogleStateCookieValue(cookieValue, 'wrong-state')).toBeNull();
     expect(verifyGoogleStateCookieValue(`${cookieValue}tamper`, state)).toBeNull();
   });
