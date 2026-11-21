@@ -67,6 +67,7 @@ export default function StorePage() {
     payUrl: string | null;
     instructions: string;
   } | null>(null);
+  const [orderModalOpen, setOrderModalOpen] = React.useState(false);
   const [checkingOrder, setCheckingOrder] = React.useState(false);
 
   const loadAll = React.useCallback(async () => {
@@ -94,6 +95,45 @@ export default function StorePage() {
   React.useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  // Возврат пользователя со страницы оплаты (?order=uuid)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const orderId = new URLSearchParams(window.location.search).get('order');
+    if (!orderId) return;
+    getStoreOrder(orderId)
+      .then((res) => {
+        setActiveOrder({
+          order: res.order,
+          payUrl: res.order.payUrl,
+          instructions:
+            res.order.status === 'fulfilled' || res.order.status === 'paid'
+              ? 'Оплата подтверждена! Домен и стартовый сайт уже активированы.'
+              : 'Если вы только что оплатили счёт, нажмите «Проверить оплату» через пару секунд.',
+        });
+        setOrderModalOpen(true);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  // Авто-проверка статуса заказа каждые 4 сек, пока открыто окно ожидания оплаты
+  React.useEffect(() => {
+    if (!orderModalOpen || !activeOrder || activeOrder.order.status !== 'pending') return;
+    const timer = setInterval(() => {
+      getStoreOrder(activeOrder.order.id)
+        .then((res) => {
+          setActiveOrder((prev) =>
+            prev ? { ...prev, order: res.order, payUrl: res.order.payUrl ?? prev.payUrl } : prev,
+          );
+          if (res.order.status === 'fulfilled' || res.order.status === 'paid') {
+            toast.success(`Оплата получена! Зона ${res.order.tld} активирована.`);
+            void loadAll();
+          }
+        })
+        .catch(() => undefined);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [orderModalOpen, activeOrder, loadAll]);
 
   const isAuthenticated = Boolean(sessionState?.session);
 
@@ -127,7 +167,8 @@ export default function StorePage() {
       });
       setActiveOrder(res);
       setCheckoutTarget(null);
-      toast.success('Счёт на оплату создан');
+      setOrderModalOpen(true);
+      toast.success('Счёт на оплату создан — нажмите кнопку оплаты в окне');
       await loadAll();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Не удалось создать заказ');
@@ -485,22 +526,37 @@ export default function StorePage() {
                     <div className="flex items-center gap-2">
                       <Badge
                         variant={
-                          ord.status === 'paid'
+                          ord.status === 'fulfilled' || ord.status === 'paid'
                             ? 'success'
                             : ord.status === 'pending'
                               ? 'warning'
                               : 'destructive'
                         }
                       >
-                        {ord.status}
+                        {ord.status === 'fulfilled' ? 'оплачено' : ord.status}
                       </Badge>
+                      {ord.status === 'pending' && ord.payUrl && (
+                        <Button asChild size="sm" className="h-7 gap-1 px-2.5 text-xs">
+                          <a href={ord.payUrl} target="_blank" rel="noreferrer">
+                            Оплатить <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </Button>
+                      )}
                       {ord.status === 'pending' && (
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="outline"
+                          className="h-7 px-2.5 text-xs"
                           onClick={() => void refreshOrderStatus(ord.id)}
                         >
                           Проверить
+                        </Button>
+                      )}
+                      {(ord.status === 'fulfilled' || ord.status === 'paid') && (
+                        <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-xs">
+                          <Link href={`/zone/${encodeURIComponent(ord.tld)}?tab=site`}>
+                            Управление
+                          </Link>
                         </Button>
                       )}
                     </div>
@@ -628,9 +684,88 @@ export default function StorePage() {
               Отмена
             </Button>
             <Button disabled={creatingOrder} onClick={() => void handleCheckoutSubmit()}>
-              {creatingOrder ? 'Создание счёта…' : 'Перейти к оплате'}
+              {creatingOrder ? 'Создание счёта…' : 'Создать счёт на оплату'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Окно выставленного счёта с прямой кнопкой оплаты */}
+      <Dialog open={orderModalOpen && Boolean(activeOrder)} onOpenChange={setOrderModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center justify-between gap-2 pr-6">
+              <span>
+                Счёт для <span className="mono">{activeOrder?.order.tld}</span>
+              </span>
+              {activeOrder && (
+                <Badge
+                  variant={
+                    activeOrder.order.status === 'fulfilled' || activeOrder.order.status === 'paid'
+                      ? 'success'
+                      : activeOrder.order.status === 'pending'
+                        ? 'warning'
+                        : 'destructive'
+                  }
+                >
+                  {activeOrder.order.status === 'fulfilled'
+                    ? 'Оплачено и выдано'
+                    : activeOrder.order.status === 'pending'
+                      ? 'Ожидает оплаты'
+                      : activeOrder.order.status}
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              К оплате:{' '}
+              <strong className="text-foreground">
+                {activeOrder?.order.amount} {activeOrder?.order.currency}
+              </strong>{' '}
+              ({activeOrder?.order.provider === 'yoomoney' ? 'ЮMoney' : activeOrder?.order.provider === 'cryptobot' ? '@CryptoBot' : 'Sandbox'})
+            </DialogDescription>
+          </DialogHeader>
+
+          {activeOrder && (
+            <div className="space-y-4 py-2">
+              {activeOrder.instructions && (
+                <p className="text-sm text-muted-foreground">{activeOrder.instructions}</p>
+              )}
+
+              {activeOrder.order.status === 'pending' && activeOrder.payUrl && (
+                <Button asChild size="lg" className="w-full gap-2 text-base">
+                  <a href={activeOrder.payUrl} target="_blank" rel="noreferrer">
+                    {activeOrder.order.provider === 'yoomoney'
+                      ? `Оплатить ${activeOrder.order.amount} ₽ в ЮMoney`
+                      : `Оплатить ${activeOrder.order.amount} ${activeOrder.order.currency} в @CryptoBot`}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
+
+              {activeOrder.order.status === 'pending' && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-1.5"
+                    disabled={checkingOrder}
+                    onClick={() => void refreshOrderStatus(activeOrder.order.id)}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${checkingOrder ? 'animate-spin' : ''}`} />
+                    Я оплатил — проверить статус
+                  </Button>
+                </div>
+              )}
+
+              {(activeOrder.order.status === 'fulfilled' || activeOrder.order.status === 'paid') && (
+                <Button asChild size="lg" className="w-full gap-2">
+                  <Link href={`/zone/${encodeURIComponent(activeOrder.order.tld)}?tab=site`}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Открыть управление зоной и сайтом
+                  </Link>
+                </Button>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
