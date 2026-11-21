@@ -23,6 +23,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 class MainActivity : AppCompatActivity() {
@@ -53,6 +55,13 @@ class MainActivity : AppCompatActivity() {
         window.statusBarColor = Color.parseColor("#050507")
         window.navigationBarColor = Color.parseColor("#050507")
 
+        val rootContainer = findViewById<View>(R.id.rootContainer)
+        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+
         webView = findViewById(R.id.webView)
         swipeRefresh = findViewById(R.id.swipeRefresh)
         progressBar = findViewById(R.id.progressBar)
@@ -78,13 +87,19 @@ class MainActivity : AppCompatActivity() {
         cookies.setAcceptThirdPartyCookies(webView, true)
 
         webView.setBackgroundColor(Color.parseColor("#050507"))
+        webView.setInitialScale(0)
+        webView.isHorizontalScrollBarEnabled = false
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
             allowFileAccess = true
             useWideViewPort = true
-            loadWithOverviewMode = true
+            loadWithOverviewMode = false
+            textZoom = 100
+            layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
+            builtInZoomControls = false
+            displayZoomControls = false
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
             mediaPlaybackRequiresUserGesture = false
             setSupportZoom(false)
