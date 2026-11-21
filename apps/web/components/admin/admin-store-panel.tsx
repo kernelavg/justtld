@@ -4,16 +4,21 @@ import * as React from 'react';
 import {
   CheckCircle2,
   Gift,
+  Megaphone,
   Plus,
   RefreshCw,
   Save,
   Settings2,
   ShoppingBag,
   Trash2,
+  Wallet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
+  AdPlacement,
+  AdSlotDto,
   PaymentOrderDto,
+  SellerEarningDto,
   StoreListingDto,
   StorePricingDto,
   ZoneCustodyDto,
@@ -25,6 +30,12 @@ import {
   adminGrantZone,
   adminUpdatePricing,
   adminUpsertListing,
+  createAdminAdSlotApi,
+  deleteAdminAdSlotApi,
+  getAdSlots,
+  getP2pEarningsApi,
+  markP2pEarningPaidApi,
+  toggleAdminAdSlotApi,
   type GatewayStatusDto,
 } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -66,15 +77,30 @@ export function AdminStorePanel() {
   const [grantOwner, setGrantOwner] = React.useState('');
   const [grantDays, setGrantDays] = React.useState('365');
 
+  const [ads, setAds] = React.useState<AdSlotDto[]>([]);
+  const [adPlacement, setAdPlacement] = React.useState<AdPlacement>('store_top');
+  const [adTitle, setAdTitle] = React.useState('');
+  const [adDesc, setAdDesc] = React.useState('');
+  const [adUrl, setAdUrl] = React.useState('');
+  const [adCta, setAdCta] = React.useState('Открыть');
+  const [adDays, setAdDays] = React.useState('30');
+  const [p2pEarnings, setP2pEarnings] = React.useState<SellerEarningDto[]>([]);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminGetStore();
+      const [res, adsRes, p2pRes] = await Promise.all([
+        adminGetStore(),
+        getAdSlots(undefined, true).catch(() => ({ ads: [] })),
+        getP2pEarningsApi(true).catch(() => ({ allEarnings: [] })),
+      ]);
       setListings(res.listings);
       setPricing(res.pricing);
       setOrders(res.orders);
       setCustody(res.custody);
       setGateways(res.gateways);
+      setAds(adsRes.ads);
+      setP2pEarnings(p2pRes.allEarnings ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Ошибка загрузки магазина');
     } finally {
@@ -525,6 +551,190 @@ export function AdminStorePanel() {
                   </div>
                   <div className="mono mt-1 text-[11px] text-muted-foreground">
                     {c.ownerAddress} · до {new Date(c.expiresAt).toLocaleDateString('ru-RU')}
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Рекламные блоки и выплаты P2P */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Megaphone className="h-4 w-4 text-primary" />
+              Рекламные блоки ({ads.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setBusy(true);
+                try {
+                  await createAdminAdSlotApi({
+                    placement: adPlacement,
+                    title: adTitle.trim(),
+                    description: adDesc.trim(),
+                    ctaLabel: adCta.trim() || 'Перейти',
+                    targetUrl: adUrl.trim(),
+                    days: Number(adDays) || 30,
+                  });
+                  toast.success('Рекламный блок добавлен');
+                  setAdTitle('');
+                  setAdDesc('');
+                  setAdUrl('');
+                  await load();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Ошибка');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <select
+                value={adPlacement}
+                onChange={(e) => setAdPlacement(e.target.value as AdPlacement)}
+                className="flex h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="store_top">Магазин (верх)</option>
+                <option value="auctions_top">Аукционы (верх)</option>
+                <option value="footer_sponsor">Футер сайта</option>
+              </select>
+              <Input
+                type="number"
+                min={1}
+                placeholder="Дней"
+                value={adDays}
+                onChange={(e) => setAdDays(e.target.value)}
+              />
+              <Input
+                required
+                placeholder="Заголовок"
+                value={adTitle}
+                onChange={(e) => setAdTitle(e.target.value)}
+                className="sm:col-span-2"
+              />
+              <Input
+                required
+                placeholder="Описание"
+                value={adDesc}
+                onChange={(e) => setAdDesc(e.target.value)}
+                className="sm:col-span-2"
+              />
+              <Input
+                required
+                type="url"
+                placeholder="Ссылка https://..."
+                value={adUrl}
+                onChange={(e) => setAdUrl(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Кнопка"
+                  value={adCta}
+                  onChange={(e) => setAdCta(e.target.value)}
+                />
+                <Button type="submit" disabled={busy} className="shrink-0">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </form>
+
+            <div className="max-h-72 space-y-2 overflow-y-auto">
+              {ads.map((ad) => (
+                <div key={ad.id} className="rounded border px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">{ad.title}</span>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={ad.isActive ? 'success' : 'secondary'}>
+                        {ad.placement} · {ad.clicksCount} клик.
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={async () => {
+                          await toggleAdminAdSlotApi(ad.id, !ad.isActive);
+                          await load();
+                        }}
+                      >
+                        {ad.isActive ? 'Выкл' : 'Вкл'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-destructive"
+                        onClick={async () => {
+                          await deleteAdminAdSlotApi(ad.id);
+                          await load();
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                    {ad.targetUrl} · до {new Date(ad.endsAt).toLocaleDateString('ru-RU')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="h-4 w-4 text-primary" />
+              P2P-продажи и выплаты продавцам ({p2pEarnings.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="max-h-96 space-y-2 overflow-y-auto">
+            {p2pEarnings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">P2P-продаж пока не было.</p>
+            ) : (
+              p2pEarnings.map((e) => (
+                <div key={e.id} className="rounded border px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      <strong className="mono">{e.tld}</strong> · продано за {e.grossRub} ₽
+                      (комиссия {e.feeRub} ₽ · к выплате <strong>{e.netRub} ₽</strong>)
+                    </span>
+                    <Badge
+                      variant={
+                        e.status === 'paid'
+                          ? 'success'
+                          : e.status === 'requested'
+                            ? 'warning'
+                            : 'secondary'
+                      }
+                    >
+                      {e.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span className="mono">
+                      Продавец: {e.sellerAddress.slice(0, 12)}…
+                      {e.payoutDestination ? ` · Реквизиты: ${e.payoutDestination}` : ''}
+                    </span>
+                    {e.status !== 'paid' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={async () => {
+                          await markP2pEarningPaidApi(e.id);
+                          toast.success('Отмечено как выплаченное');
+                          await load();
+                        }}
+                      >
+                        Отметить выплаченным
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))

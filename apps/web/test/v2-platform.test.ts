@@ -2,7 +2,10 @@
 import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  adminAdSlotSchema,
   createAuctionSchema,
+  monetizationOrderSchema,
+  p2pListingCreateSchema,
   placeAuctionBidSchema,
   siteFilePathSchema,
 } from '@justtld/shared';
@@ -145,5 +148,27 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
       },
     });
     expect(() => assertSameOrigin(reqEvil)).toThrow();
+  });
+
+  it('валидирует схемы P2P-перепродажи, PRO/ТОП-заказов и рекламы', () => {
+    expect(
+      p2pListingCreateSchema.parse({ tld: 'vip', title: 'VIP зона', priceRub: 500 }),
+    ).toMatchObject({ tld: '.vip', priceRub: 500 });
+    expect(() =>
+      p2pListingCreateSchema.parse({ tld: '.vip', title: 'Дешево', priceRub: 20 }),
+    ).toThrow();
+
+    expect(
+      monetizationOrderSchema.parse({ kind: 'site_pro', tld: '.vip', provider: 'yoomoney' }).kind,
+    ).toBe('site_pro');
+
+    expect(
+      adminAdSlotSchema.parse({
+        placement: 'store_top',
+        title: 'Телеграм-канал',
+        description: 'Новости и дропы доменов',
+        targetUrl: 'https://t.me/JustTLD',
+      }).placement,
+    ).toBe('store_top');
   });
 });

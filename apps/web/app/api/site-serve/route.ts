@@ -118,7 +118,17 @@ export async function GET(request: Request): Promise<Response> {
     for (const candidate of candidates) {
       const file = await getSiteFile(tld, subLabel, candidate);
       if (file) {
-        return new Response(new Uint8Array(file.content), {
+        let body: BodyInit = new Uint8Array(file.content);
+        const isHtml = file.mimeType.toLowerCase().includes('text/html');
+        if (isHtml && !settings.proUnlocked) {
+          const portal = `https://${resolverDomain() || 'justtld.online'}`;
+          const badge = `<a href="${portal}" target="_blank" rel="noopener noreferrer" style="position:fixed;right:12px;bottom:12px;z-index:2147483647;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;background:rgba(10,12,18,0.88);color:#e4e4e7;border:1px solid rgba(255,255,255,0.16);font:500 11px/1 Inter,system-ui,sans-serif;text-decoration:none;backdrop-filter:blur(8px);box-shadow:0 4px 16px rgba(0,0,0,0.3)">Работает на JustTLD · @JustTLD</a>`;
+          const rawHtml = Buffer.from(file.content).toString('utf8');
+          body = /<\/body>/i.test(rawHtml)
+            ? rawHtml.replace(/<\/body>/i, `${badge}</body>`)
+            : `${rawHtml}${badge}`;
+        }
+        return new Response(body, {
           status: 200,
           headers: {
             'Content-Type': file.mimeType,

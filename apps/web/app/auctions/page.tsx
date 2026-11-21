@@ -24,6 +24,7 @@ import type {
 import {
   cancelAuctionApi,
   claimAuctionApi,
+  createMonetizationOrderApi,
   getAuctionDetail,
   getAuctions,
   getSession,
@@ -33,6 +34,7 @@ import {
   type SessionResponse,
   type StoreCatalogResponse,
 } from '@/lib/api';
+import { AdBanner } from '@/components/ads/ad-banner';
 import { EmailAuthCard } from '@/components/auth/email-auth-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -94,6 +96,7 @@ export default function AuctionsPage() {
     instructions: string;
   } | null>(null);
   const [checkingOrder, setCheckingOrder] = React.useState(false);
+  const [boostTarget, setBoostTarget] = React.useState<AuctionDto | null>(null);
 
   const loadAll = React.useCallback(async () => {
     setLoading(true);
@@ -304,6 +307,8 @@ export default function AuctionsPage() {
         </div>
       )}
 
+      <AdBanner placement="auctions_top" isAuthenticated={isAuthenticated} isAdmin={isAdmin} />
+
       {/* Фильтры */}
       <div className="flex flex-wrap items-center gap-1.5">
         {[
@@ -354,10 +359,22 @@ export default function AuctionsPage() {
               auction.bidsCount > 0 ? auction.currentBidRub : auction.startPriceRub;
 
             return (
-              <Card key={auction.id} className="card-hover flex min-w-0 flex-col justify-between">
+              <Card
+                key={auction.id}
+                className={`card-hover flex min-w-0 flex-col justify-between ${
+                  auction.isFeatured ? 'border-warning/60' : ''
+                }`}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="mono text-xl font-semibold">{auction.tld}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="mono text-xl font-semibold">{auction.tld}</CardTitle>
+                      {auction.isFeatured && (
+                        <Badge variant="warning" className="text-[10px]">
+                          ТОП
+                        </Badge>
+                      )}
+                    </div>
                     {auction.status === 'active' ? (
                       <Badge variant="outline" className="gap-1 text-[11px]">
                         <Clock className="h-3 w-3 text-primary" />
@@ -452,6 +469,20 @@ export default function AuctionsPage() {
                         Отменить
                       </Button>
                     )}
+
+                    {active &&
+                      !auction.isFeatured &&
+                      (isAdmin ||
+                        (userAddr && auction.createdBy.toLowerCase() === userAddr)) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full text-xs"
+                          onClick={() => setBoostTarget(auction)}
+                        >
+                          В ТОП · 99 ₽
+                        </Button>
+                      )}
                   </div>
                 </CardContent>
               </Card>
@@ -459,6 +490,118 @@ export default function AuctionsPage() {
           })}
         </div>
       )}
+
+      {/* Модалка: поднять аукцион в ТОП */}
+      <Dialog open={Boolean(boostTarget)} onOpenChange={(o) => !o && setBoostTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Поднять аукцион {boostTarget?.tld} в ТОП</DialogTitle>
+            <DialogDescription>
+              Лот закрепится наверху списка аукционов на 7 дней с бейджем ТОП. Стоимость: 99 ₽ или
+              1 USDT.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                provider === 'yoomoney' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="boost-auc-provider"
+                  checked={provider === 'yoomoney'}
+                  onChange={() => setProvider('yoomoney')}
+                />
+                <CreditCard className="h-4 w-4 text-primary" />
+                ЮMoney
+              </div>
+              <span className="font-semibold">99 ₽</span>
+            </label>
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                provider === 'cryptobot' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="boost-auc-provider"
+                  checked={provider === 'cryptobot'}
+                  onChange={() => setProvider('cryptobot')}
+                />
+                <Coins className="h-4 w-4 text-primary" />
+                @CryptoBot
+              </div>
+              <span className="font-semibold">1 USDT</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap justify-between gap-2 pt-2">
+            {isAdmin ? (
+              <Button
+                variant="outline"
+                disabled={claiming}
+                onClick={async () => {
+                  if (!boostTarget) return;
+                  setClaiming(true);
+                  try {
+                    await createMonetizationOrderApi(
+                      { kind: 'boost_auction', targetId: boostTarget.id },
+                      true,
+                    );
+                    toast.success('Аукцион поднят в ТОП!');
+                    setBoostTarget(null);
+                    await loadAll();
+                  } finally {
+                    setClaiming(false);
+                  }
+                }}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                В ТОП (админ)
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setBoostTarget(null)}>
+                Отмена
+              </Button>
+              <Button
+                disabled={claiming}
+                onClick={async () => {
+                  if (!boostTarget) return;
+                  setClaiming(true);
+                  try {
+                    const res = await createMonetizationOrderApi({
+                      kind: 'boost_auction',
+                      targetId: boostTarget.id,
+                      tld: boostTarget.tld,
+                      provider,
+                      currency: provider === 'cryptobot' ? 'USDT' : 'RUB',
+                    });
+                    if (res.order) {
+                      setBoostTarget(null);
+                      setClaimOrder({
+                        order: res.order,
+                        payUrl: res.payUrl ?? null,
+                        instructions: res.instructions ?? '',
+                      });
+                    }
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Ошибка оплаты');
+                  } finally {
+                    setClaiming(false);
+                  }
+                }}
+              >
+                Оплатить
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Модалка: открыть новый аукцион */}
       <Dialog open={openModal} onOpenChange={setOpenModal}>

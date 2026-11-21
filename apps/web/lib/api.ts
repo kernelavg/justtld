@@ -2,6 +2,8 @@
 
 import type {
   AccountDto,
+  AdPlacement,
+  AdSlotDto,
   AuctionBidDto,
   AuctionDto,
   DnsRecordDto,
@@ -9,6 +11,7 @@ import type {
   Paginated,
   PaymentOrderDto,
   PaymentProvider,
+  SellerEarningDto,
   SiteFileDto,
   SiteSettingsDto,
   StatsDto,
@@ -601,3 +604,97 @@ export const cancelAuctionApi = (id: string) =>
     `/api/auctions/${encodeURIComponent(id)}/cancel`,
     {},
   );
+
+/* ─────────── монетизация: реклама, P2P-продажи, ТОП-лоты, PRO-сайт ─────────── */
+
+export const getAdSlots = (placement?: AdPlacement, all = false) => {
+  const qs = new URLSearchParams();
+  if (placement) qs.set('placement', placement);
+  if (all) qs.set('all', '1');
+  const q = qs.toString();
+  return apiFetch<{ ads: AdSlotDto[] }>(`/api/ads${q ? `?${q}` : ''}`);
+};
+
+export const createAdminAdSlotApi = (payload: {
+  placement: AdPlacement;
+  title: string;
+  description: string;
+  ctaLabel?: string;
+  targetUrl: string;
+  badgeText?: string;
+  days?: number;
+  isActive?: boolean;
+}) => postJson<{ ad: AdSlotDto }>('/api/ads', payload);
+
+export const toggleAdminAdSlotApi = (id: string, isActive: boolean) =>
+  apiFetch<{ ad: AdSlotDto }>('/api/ads', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, isActive }),
+  });
+
+export const deleteAdminAdSlotApi = (id: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/ads?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+export const getP2pEarningsApi = (all = false) =>
+  apiFetch<{
+    earnings: SellerEarningDto[];
+    allEarnings: SellerEarningDto[];
+    totals: { availableRub: number; requestedRub: number; paidRub: number };
+  }>(`/api/store/p2p${all ? '?all=1' : ''}`);
+
+export const createP2pListingApi = (payload: {
+  tld: string;
+  subLabel?: string;
+  title: string;
+  description?: string;
+  priceRub: number;
+}) => postJson<{ listing: StoreListingDto }>('/api/store/p2p', payload);
+
+export const deleteP2pListingApi = (id: string) =>
+  apiFetch<{ deleted: boolean }>(`/api/store/p2p?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+export const requestP2pPayoutApi = (destination: string) =>
+  apiFetch<{ requestedCount: number }>('/api/store/p2p', {
+    method: 'PATCH',
+    body: JSON.stringify({ destination }),
+  });
+
+export const markP2pEarningPaidApi = (id: string) =>
+  apiFetch<{ earning: SellerEarningDto }>(`/api/store/p2p?markPaid=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+  });
+
+export const createMonetizationOrderApi = (
+  payload: {
+    kind: 'site_pro' | 'boost_listing' | 'boost_auction' | 'ad_slot';
+    provider?: PaymentProvider;
+    currency?: 'RUB' | 'USDT' | 'TON' | 'BTC' | 'ETH';
+    tld?: string;
+    subLabel?: string;
+    targetId?: string;
+    ad?: {
+      placement: AdPlacement;
+      title: string;
+      description: string;
+      ctaLabel?: string;
+      targetUrl: string;
+      badgeText?: string;
+    };
+  },
+  adminApply = false,
+) =>
+  postJson<{
+    applied?: boolean;
+    order?: PaymentOrderDto;
+    payUrl?: string | null;
+    instructions?: string;
+    settings?: SiteSettingsDto;
+    listing?: StoreListingDto;
+    auction?: AuctionDto;
+    ad?: AdSlotDto;
+  }>(`/api/monetization/order${adminApply ? '?adminApply=1' : ''}`, payload);
+

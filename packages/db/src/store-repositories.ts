@@ -148,32 +148,47 @@ type ListingRow = {
   period_days: number;
   status: StoreListingStatus;
   buyer_address: string | null;
+  seller_address: string | null;
+  fee_percent: number | null;
+  is_featured: boolean | null;
+  featured_until: Date | null;
   sold_at: Date | null;
   created_at: Date;
   updated_at: Date;
 };
 
-const toListingDto = (r: ListingRow): StoreListingDto => ({
-  id: r.id,
-  tld: r.tld,
-  subLabel: r.sub_label,
-  title: r.title,
-  description: r.description,
-  priceRub: Number(r.price_rub),
-  priceUsdt: Number(r.price_usdt),
-  periodDays: r.period_days,
-  status: r.status,
-  buyerAddress: r.buyer_address,
-  soldAt: r.sold_at ? iso(r.sold_at) : null,
-  createdAt: iso(r.created_at),
-  updatedAt: iso(r.updated_at),
-});
+const toListingDto = (r: ListingRow): StoreListingDto => {
+  const featuredActive =
+    Boolean(r.is_featured) && (!r.featured_until || r.featured_until.getTime() > Date.now());
+  return {
+    id: r.id,
+    tld: r.tld,
+    subLabel: r.sub_label,
+    title: r.title,
+    description: r.description,
+    priceRub: Number(r.price_rub),
+    priceUsdt: Number(r.price_usdt),
+    periodDays: r.period_days,
+    status: r.status,
+    buyerAddress: r.buyer_address,
+    sellerAddress: r.seller_address ?? null,
+    feePercent: r.fee_percent ?? 10,
+    isFeatured: featuredActive,
+    featuredUntil: r.featured_until ? iso(r.featured_until) : null,
+    soldAt: r.sold_at ? iso(r.sold_at) : null,
+    createdAt: iso(r.created_at),
+    updatedAt: iso(r.updated_at),
+  };
+};
 
 export async function listStoreListings(onlyAvailable = true): Promise<StoreListingDto[]> {
   const rows = await queryRows<ListingRow>(
     onlyAvailable
-      ? `SELECT * FROM store_listings WHERE status = 'available' ORDER BY created_at DESC`
-      : `SELECT * FROM store_listings ORDER BY created_at DESC`,
+      ? `SELECT * FROM store_listings
+         WHERE status = 'available'
+         ORDER BY (is_featured AND (featured_until IS NULL OR featured_until > now())) DESC, created_at DESC`
+      : `SELECT * FROM store_listings
+         ORDER BY (is_featured AND (featured_until IS NULL OR featured_until > now())) DESC, created_at DESC`,
   );
   return rows.map(toListingDto);
 }
@@ -235,6 +250,60 @@ export async function markListingSold(id: string, buyerAddress: string): Promise
      WHERE id = $1`,
     [id, buyerAddress.toLowerCase()],
   );
+}
+
+export async function createP2pListing(input: {
+  tld: string;
+  subLabel?: string;
+  title: string;
+  description: string;
+  priceRub: number;
+  priceUsdt: number;
+  sellerAddress: string;
+  feePercent?: number;
+}): Promise<StoreListingDto> {
+  const row = await queryOne<ListingRow>(
+    `INSERT INTO store_listings
+       (tld, sub_label, title, description, price_rub, price_usdt, period_days, status, seller_address, fee_percent)
+     VALUES ($1, $2, $3, $4, $5, $6, 365, 'available', $7, $8)
+     ON CONFLICT (tld, sub_label) DO UPDATE SET
+       title = EXCLUDED.title,
+       description = EXCLUDED.description,
+       price_rub = EXCLUDED.price_rub,
+       price_usdt = EXCLUDED.price_usdt,
+       status = 'available',
+       seller_address = EXCLUDED.seller_address,
+       fee_percent = EXCLUDED.fee_percent,
+       buyer_address = NULL,
+       sold_at = NULL,
+       updated_at = now()
+     RETURNING *`,
+    [
+      input.tld.toLowerCase(),
+      (input.subLabel ?? '').toLowerCase(),
+      input.title,
+      input.description,
+      input.priceRub,
+      input.priceUsdt,
+      input.sellerAddress.toLowerCase(),
+      input.feePercent ?? 10,
+    ],
+  );
+  if (!row) throw new Error('createP2pListing failed');
+  return toListingDto(row);
+}
+
+export async function boostStoreListing(id: string, days = 7): Promise<StoreListingDto | null> {
+  const row = await queryOne<ListingRow>(
+    `UPDATE store_listings
+     SET is_featured = true,
+         featured_until = GREATEST(COALESCE(featured_until, now()), now()) + ($2 || ' days')::interval,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [id, days],
+  );
+  return row ? toListingDto(row) : null;
 }
 
 /* ─────────────────────────── payment orders ─────────────────────────── */
@@ -496,8 +565,21 @@ type SiteSettingsRow = {
   mode: SiteMode;
   entry_file: string;
   spa_fallback: boolean;
+  pro_unlocked: boolean | null;
+  pro_until: Date | null;
   updated_at: Date;
 };
+
+const toSiteSettingsDto = (row: SiteSettingsRow): SiteSettingsDto => ({
+  tld: row.tld,
+  subLabel: row.sub_label,
+  mode: row.mode,
+  entryFile: row.entry_file,
+  spaFallback: row.spa_fallback,
+  proUnlocked: Boolean(row.pro_unlocked) && (!row.pro_until || row.pro_until.getTime() > Date.now()),
+  proUntil: row.pro_until ? iso(row.pro_until) : null,
+  updatedAt: iso(row.updated_at),
+});
 
 export async function getSiteSettings(tld: string, subLabel = ''): Promise<SiteSettingsDto> {
   const row = await queryOne<SiteSettingsRow>(
@@ -511,17 +593,12 @@ export async function getSiteSettings(tld: string, subLabel = ''): Promise<SiteS
       mode: 'card',
       entryFile: 'index.html',
       spaFallback: false,
+      proUnlocked: false,
+      proUntil: null,
       updatedAt: new Date(0).toISOString(),
     };
   }
-  return {
-    tld: row.tld,
-    subLabel: row.sub_label,
-    mode: row.mode,
-    entryFile: row.entry_file,
-    spaFallback: row.spa_fallback,
-    updatedAt: iso(row.updated_at),
-  };
+  return toSiteSettingsDto(row);
 }
 
 export async function upsertSiteSettings(input: {
@@ -549,14 +626,26 @@ export async function upsertSiteSettings(input: {
     ],
   );
   if (!row) throw new Error('upsertSiteSettings failed');
-  return {
-    tld: row.tld,
-    subLabel: row.sub_label,
-    mode: row.mode,
-    entryFile: row.entry_file,
-    spaFallback: row.spa_fallback,
-    updatedAt: iso(row.updated_at),
-  };
+  return toSiteSettingsDto(row);
+}
+
+export async function setSiteProUnlocked(
+  tld: string,
+  subLabel = '',
+  unlocked = true,
+): Promise<SiteSettingsDto> {
+  const row = await queryOne<SiteSettingsRow>(
+    `INSERT INTO site_settings (tld, sub_label, mode, entry_file, spa_fallback, pro_unlocked, pro_until, updated_at)
+     VALUES ($1, $2, 'hosting', 'index.html', false, $3, NULL, now())
+     ON CONFLICT (tld, sub_label) DO UPDATE SET
+       pro_unlocked = EXCLUDED.pro_unlocked,
+       pro_until = NULL,
+       updated_at = now()
+     RETURNING *`,
+    [tld.toLowerCase(), subLabel.toLowerCase(), unlocked],
+  );
+  if (!row) throw new Error('setSiteProUnlocked failed');
+  return toSiteSettingsDto(row);
 }
 
 type SiteFileRow = {

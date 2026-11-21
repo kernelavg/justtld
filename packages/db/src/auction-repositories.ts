@@ -19,6 +19,8 @@ type AuctionRow = {
   starts_at: Date;
   ends_at: Date;
   status: AuctionStatus;
+  is_featured: boolean | null;
+  featured_until: Date | null;
   settlement_order_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -34,6 +36,8 @@ type BidRow = {
 };
 
 function mapAuction(row: AuctionRow): AuctionDto {
+  const featuredActive =
+    Boolean(row.is_featured) && (!row.featured_until || row.featured_until.getTime() > Date.now());
   return {
     id: row.id,
     tld: row.tld,
@@ -49,6 +53,8 @@ function mapAuction(row: AuctionRow): AuctionDto {
     startsAt: iso(row.starts_at),
     endsAt: iso(row.ends_at),
     status: row.status,
+    isFeatured: featuredActive,
+    featuredUntil: row.featured_until ? iso(row.featured_until) : null,
     settlementOrderId: row.settlement_order_id,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
@@ -95,12 +101,18 @@ export async function listAuctions(options?: {
                WHEN 'settled' THEN 2
                ELSE 3
              END,
+             (is_featured AND (featured_until IS NULL OR featured_until > now())) DESC,
              ends_at ASC
            LIMIT $1`,
           [limit],
         )
       : await queryRows<AuctionRow>(
-          `SELECT * FROM zone_auctions WHERE status = $1 ORDER BY ends_at ASC LIMIT $2`,
+          `SELECT * FROM zone_auctions
+           WHERE status = $1
+           ORDER BY
+             (is_featured AND (featured_until IS NULL OR featured_until > now())) DESC,
+             ends_at ASC
+           LIMIT $2`,
           [status, limit],
         );
   return rows.map(mapAuction);
@@ -288,6 +300,19 @@ export async function cancelAuction(auctionId: string): Promise<AuctionDto | nul
      WHERE id = $1 AND status IN ('active', 'awaiting_payment')
      RETURNING *`,
     [auctionId],
+  );
+  return row ? mapAuction(row) : null;
+}
+
+export async function boostAuction(auctionId: string, days = 7): Promise<AuctionDto | null> {
+  const row = await queryOne<AuctionRow>(
+    `UPDATE zone_auctions
+     SET is_featured = true,
+         featured_until = GREATEST(COALESCE(featured_until, now()), now()) + ($2 || ' days')::interval,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [auctionId, days],
   );
   return row ? mapAuction(row) : null;
 }

@@ -167,6 +167,10 @@ export type StoreListingDto = {
   periodDays: number;
   status: StoreListingStatus;
   buyerAddress: string | null;
+  sellerAddress: string | null;
+  feePercent: number;
+  isFeatured: boolean;
+  featuredUntil: string | null;
   soldAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -183,7 +187,16 @@ export type StorePricingDto = {
 
 export type PaymentProvider = 'yoomoney' | 'cryptobot' | 'sandbox';
 export type PaymentStatus = 'pending' | 'paid' | 'fulfilled' | 'expired' | 'failed';
-export type OrderKind = 'listing' | 'custom_zone' | 'custom_subdomain' | 'renewal' | 'auction';
+export type OrderKind =
+  | 'listing'
+  | 'custom_zone'
+  | 'custom_subdomain'
+  | 'renewal'
+  | 'auction'
+  | 'site_pro'
+  | 'boost_listing'
+  | 'boost_auction'
+  | 'ad_slot';
 
 export type AuctionStatus = 'active' | 'awaiting_payment' | 'settled' | 'cancelled';
 
@@ -202,6 +215,8 @@ export type AuctionDto = {
   startsAt: string;
   endsAt: string;
   status: AuctionStatus;
+  isFeatured: boolean;
+  featuredUntil: string | null;
   settlementOrderId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -257,7 +272,42 @@ export type SiteSettingsDto = {
   mode: SiteMode;
   entryFile: string;
   spaFallback: boolean;
+  proUnlocked: boolean;
+  proUntil: string | null;
   updatedAt: string;
+};
+
+export type AdPlacement = 'store_top' | 'auctions_top' | 'footer_sponsor';
+
+export type AdSlotDto = {
+  id: string;
+  placement: AdPlacement;
+  title: string;
+  description: string;
+  ctaLabel: string;
+  targetUrl: string;
+  badgeText: string;
+  ownerAddress: string | null;
+  isActive: boolean;
+  startsAt: string;
+  endsAt: string;
+  clicksCount: number;
+  createdAt: string;
+};
+
+export type SellerEarningDto = {
+  id: string;
+  sellerAddress: string;
+  orderId: string;
+  listingId: string | null;
+  tld: string;
+  grossRub: number;
+  feeRub: number;
+  netRub: number;
+  status: 'available' | 'requested' | 'paid';
+  payoutDestination: string | null;
+  createdAt: string;
+  paidAt: string | null;
 };
 
 export type SiteFileDto = {

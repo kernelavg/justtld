@@ -9,23 +9,33 @@ import {
   ExternalLink,
   FlaskConical,
   Globe,
+  Plus,
   RefreshCw,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Tag,
+  Wallet,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PaymentOrderDto, PaymentProvider, StoreListingDto } from '@justtld/shared';
 import {
   confirmStoreOrder,
+  createMonetizationOrderApi,
+  createP2pListingApi,
   createStoreOrder,
+  deleteP2pListingApi,
+  getP2pEarningsApi,
   getSession,
   getStoreCatalog,
   getStoreOrder,
+  requestP2pPayoutApi,
   signInWithWallet,
   type SessionResponse,
   type StoreCatalogResponse,
 } from '@/lib/api';
 import { useWallet } from '@/lib/wallet';
+import { AdBanner } from '@/components/ads/ad-banner';
 import { EmailAuthCard } from '@/components/auth/email-auth-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,12 +80,32 @@ export default function StorePage() {
   const [orderModalOpen, setOrderModalOpen] = React.useState(false);
   const [checkingOrder, setCheckingOrder] = React.useState(false);
 
+  const [p2pTotals, setP2pTotals] = React.useState({
+    availableRub: 0,
+    requestedRub: 0,
+    paidRub: 0,
+  });
+  const [p2pModalOpen, setP2pModalOpen] = React.useState(false);
+  const [p2pTld, setP2pTld] = React.useState('');
+  const [p2pTitle, setP2pTitle] = React.useState('');
+  const [p2pDesc, setP2pDesc] = React.useState('');
+  const [p2pPrice, setP2pPrice] = React.useState(390);
+  const [p2pBusy, setP2pBusy] = React.useState(false);
+  const [payoutModalOpen, setPayoutModalOpen] = React.useState(false);
+  const [payoutDest, setPayoutDest] = React.useState('');
+  const [boostTarget, setBoostTarget] = React.useState<StoreListingDto | null>(null);
+
   const loadAll = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [cat, sess] = await Promise.all([getStoreCatalog(), getSession()]);
+      const [cat, sess, p2p] = await Promise.all([
+        getStoreCatalog(),
+        getSession(),
+        getP2pEarningsApi().catch(() => null),
+      ]);
       setCatalog(cat);
       setSessionState(sess);
+      if (p2p) setP2pTotals(p2p.totals);
       if (!cat.gateways.yoomoneyConfigured && cat.gateways.cryptobotConfigured) {
         setProvider('cryptobot');
       } else if (
@@ -218,6 +248,8 @@ export default function StorePage() {
   const normalizedCustomTld = customTld.trim().toLowerCase().replace(/^\.+/, '');
   const customRub = catalog ? catalog.pricing.customZonePriceRub : 0;
   const customUsdt = catalog ? Number(catalog.pricing.customZonePriceUsdt.toFixed(2)) : 0;
+  const userAddr = sessionState?.session?.address?.toLowerCase() ?? null;
+  const isAdmin = sessionState?.session?.role === 'admin';
 
   return (
     <div className="container max-w-6xl space-y-8 py-10">
@@ -266,6 +298,33 @@ export default function StorePage() {
           )}
         </div>
       )}
+
+      <AdBanner placement="store_top" isAuthenticated={isAuthenticated} isAdmin={isAdmin} />
+
+      {isAuthenticated &&
+        (p2pTotals.availableRub > 0 || p2pTotals.requestedRub > 0 || p2pTotals.paidRub > 0) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card/60 px-4 py-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <Wallet className="h-4 w-4 text-primary" />
+              <span>
+                Ваш доход от P2P-продаж (после комиссии 10%):{' '}
+                <strong className="text-foreground">{p2pTotals.availableRub} ₽</strong> доступно
+                {p2pTotals.requestedRub > 0 ? ` · ${p2pTotals.requestedRub} ₽ на выводе` : ''}
+                {p2pTotals.paidRub > 0 ? ` · ${p2pTotals.paidRub} ₽ выплачено` : ''}
+              </span>
+            </div>
+            {p2pTotals.availableRub > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setPayoutModalOpen(true)}
+              >
+                Вывести {p2pTotals.availableRub} ₽
+              </Button>
+            )}
+          </div>
+        )}
 
       {activeOrder && (
         <Alert>
@@ -396,14 +455,31 @@ export default function StorePage() {
         </CardContent>
       </Card>
 
-      {/* Витрина лотов от админа */}
+      {/* Витрина лотов от админа и пользователей */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Витрина зон от администратора</h2>
-          <Button variant="ghost" size="sm" onClick={() => void loadAll()} className="gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Обновить
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold">Витрина зон и P2P-маркетплейс</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-full"
+              onClick={() => {
+                if (!isAuthenticated) {
+                  toast.info('Войдите в аккаунт, чтобы выставить свою зону на продажу');
+                  return;
+                }
+                setP2pModalOpen(true);
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Продать свою зону (комиссия 10%)
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void loadAll()} className="gap-1.5">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Обновить
+            </Button>
+          </div>
         </div>
 
         {loading ? (
@@ -415,44 +491,97 @@ export default function StorePage() {
         ) : !catalog?.listings.length ? (
           <Card>
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              Администратор ещё не добавил готовые лоты на витрину — вы можете купить любую
-              свободную зону через форму выше.
+              На витрине пока нет лотов — вы можете купить новую зону выше или выставить свою на
+              перепродажу.
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {catalog.listings.map((item) => (
-              <Card key={item.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-2">
-                    <CardTitle className="mono text-xl">{item.tld}</CardTitle>
-                    <Badge variant="secondary">{item.status}</Badge>
-                  </div>
-                  <CardDescription>{item.title}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {item.description && (
-                    <p className="text-sm text-muted-foreground">{item.description}</p>
-                  )}
-                  <div className="flex items-baseline justify-between rounded-md bg-muted/40 px-3 py-2">
-                    <div className="text-sm font-semibold">
-                      {item.priceRub} ₽{' '}
-                      <span className="text-xs font-normal text-muted-foreground">
-                        / {item.priceUsdt} USDT
-                      </span>
+            {catalog.listings.map((item) => {
+              const isSeller = Boolean(
+                userAddr && item.sellerAddress?.toLowerCase() === userAddr,
+              );
+              const assetTitle = item.subLabel ? `${item.subLabel}${item.tld}` : item.tld;
+              return (
+                <Card
+                  key={item.id}
+                  className={item.isFeatured ? 'border-warning/60' : undefined}
+                >
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <CardTitle className="mono text-xl">{assetTitle}</CardTitle>
+                        {item.isFeatured && (
+                          <Badge variant="warning" className="text-[10px]">
+                            ТОП
+                          </Badge>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="gap-1 text-[10px]">
+                        {item.sellerAddress ? (
+                          <>
+                            <Tag className="h-3 w-3" /> P2P
+                          </>
+                        ) : (
+                          item.status
+                        )}
+                      </Badge>
                     </div>
-                    <span className="text-xs text-muted-foreground">{item.periodDays} дн.</span>
-                  </div>
-                  <Button
-                    className="w-full"
-                    disabled={!isAuthenticated}
-                    onClick={() => setCheckoutTarget({ mode: 'listing', listing: item })}
-                  >
-                    {isAuthenticated ? 'Выбрать способ оплаты' : 'Войдите для покупки'}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    <CardDescription>{item.title}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {item.description && (
+                      <p className="text-sm text-muted-foreground">{item.description}</p>
+                    )}
+                    <div className="flex items-baseline justify-between rounded-md bg-muted/40 px-3 py-2">
+                      <div className="text-sm font-semibold">
+                        {item.priceRub} ₽{' '}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          / {item.priceUsdt} USDT
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{item.periodDays} дн.</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {!isSeller && (
+                        <Button
+                          className="flex-1"
+                          disabled={!isAuthenticated}
+                          onClick={() => setCheckoutTarget({ mode: 'listing', listing: item })}
+                        >
+                          {isAuthenticated ? 'Выбрать способ оплаты' : 'Войдите для покупки'}
+                        </Button>
+                      )}
+                      {(isSeller || isAdmin) && !item.isFeatured && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full text-xs"
+                          onClick={() => setBoostTarget(item)}
+                        >
+                          В ТОП · 99 ₽
+                        </Button>
+                      )}
+                      {(isSeller || isAdmin) && item.sellerAddress && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-destructive"
+                          onClick={async () => {
+                            await deleteP2pListingApi(item.id);
+                            toast.success(`Лот ${assetTitle} снят с продажи`);
+                            await loadAll();
+                          }}
+                        >
+                          Снять
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
@@ -752,6 +881,259 @@ export default function StorePage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* P2P: выставить свою зону на продажу */}
+      <Dialog open={p2pModalOpen} onOpenChange={setP2pModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Продать свою зону (P2P)</DialogTitle>
+            <DialogDescription>
+              Выставите принадлежащую вам зону на витрину. После продажи 90% суммы начислятся на
+              ваш баланс (комиссия платформы 10%).
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setP2pBusy(true);
+              try {
+                const clean = p2pTld.trim().toLowerCase().replace(/^\.+/, '');
+                await createP2pListingApi({
+                  tld: `.${clean}`,
+                  title: p2pTitle.trim() || `Зона .${clean} от владельца`,
+                  description: p2pDesc.trim(),
+                  priceRub: p2pPrice,
+                });
+                toast.success(`Зона .${clean} выставлена на витрину!`);
+                setP2pModalOpen(false);
+                setP2pTld('');
+                setP2pTitle('');
+                setP2pDesc('');
+                await loadAll();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Не удалось выставить зону');
+              } finally {
+                setP2pBusy(false);
+              }
+            }}
+            className="space-y-3"
+          >
+            <div className="space-y-1">
+              <Label>Ваша зона</Label>
+              <div className="flex items-center gap-1.5">
+                <span className="mono text-lg font-bold text-muted-foreground">.</span>
+                <Input
+                  required
+                  value={p2pTld}
+                  onChange={(e) => setP2pTld(e.target.value)}
+                  placeholder="myzone"
+                  className="mono"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Заголовок лота</Label>
+              <Input
+                required
+                value={p2pTitle}
+                onChange={(e) => setP2pTitle(e.target.value)}
+                placeholder="Краткое описание зоны"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Подробности (необязательно)</Label>
+              <Input
+                value={p2pDesc}
+                onChange={(e) => setP2pDesc(e.target.value)}
+                placeholder="Идеально для бизнеса или проекта"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Цена продажи (₽)</Label>
+              <Input
+                type="number"
+                min={100}
+                max={500000}
+                value={p2pPrice}
+                onChange={(e) => setP2pPrice(Number(e.target.value) || 390)}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Вы получите на баланс: {Math.round(p2pPrice * 0.9)} ₽ (комиссия 10%).
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setP2pModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" disabled={p2pBusy}>
+                {p2pBusy ? 'Публикация…' : 'Выставить на витрину'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Запрос вывода средств продавца */}
+      <Dialog open={payoutModalOpen} onOpenChange={setPayoutModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Вывод дохода от продаж</DialogTitle>
+            <DialogDescription>
+              Доступно к выводу: <strong>{p2pTotals.availableRub} ₽</strong>. Укажите номер
+              кошелька ЮMoney, карты или Telegram @username для перевода в USDT.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setP2pBusy(true);
+              try {
+                await requestP2pPayoutApi(payoutDest.trim());
+                toast.success('Заявка на вывод отправлена администратору!');
+                setPayoutModalOpen(false);
+                setPayoutDest('');
+                await loadAll();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Ошибка заявки');
+              } finally {
+                setP2pBusy(false);
+              }
+            }}
+            className="space-y-3"
+          >
+            <div className="space-y-1">
+              <Label>Реквизиты для выплаты</Label>
+              <Input
+                required
+                value={payoutDest}
+                onChange={(e) => setPayoutDest(e.target.value)}
+                placeholder="ЮMoney 41001... или Telegram @username (USDT)"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPayoutModalOpen(false)}>
+                Отмена
+              </Button>
+              <Button type="submit" disabled={p2pBusy}>
+                Отправить заявку
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Поднять лот в ТОП */}
+      <Dialog open={Boolean(boostTarget)} onOpenChange={(o) => !o && setBoostTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Поднять {boostTarget?.tld} в ТОП витрины</DialogTitle>
+            <DialogDescription>
+              Лот закрепится в самом начале магазина на 7 дней с бейджем ТОП. Стоимость: 99 ₽ или 1
+              USDT.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                provider === 'yoomoney' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="boost-list-provider"
+                  checked={provider === 'yoomoney'}
+                  onChange={() => setProvider('yoomoney')}
+                />
+                <CreditCard className="h-4 w-4 text-primary" />
+                ЮMoney
+              </div>
+              <span className="font-semibold">99 ₽</span>
+            </label>
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                provider === 'cryptobot' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="boost-list-provider"
+                  checked={provider === 'cryptobot'}
+                  onChange={() => setProvider('cryptobot')}
+                />
+                <Coins className="h-4 w-4 text-primary" />
+                @CryptoBot
+              </div>
+              <span className="font-semibold">1 USDT</span>
+            </label>
+          </div>
+          <div className="flex flex-wrap justify-between gap-2 pt-2">
+            {isAdmin ? (
+              <Button
+                variant="outline"
+                disabled={creatingOrder}
+                onClick={async () => {
+                  if (!boostTarget) return;
+                  setCreatingOrder(true);
+                  try {
+                    await createMonetizationOrderApi(
+                      { kind: 'boost_listing', targetId: boostTarget.id },
+                      true,
+                    );
+                    toast.success('Лот поднят в ТОП!');
+                    setBoostTarget(null);
+                    await loadAll();
+                  } finally {
+                    setCreatingOrder(false);
+                  }
+                }}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                В ТОП (админ)
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setBoostTarget(null)}>
+                Отмена
+              </Button>
+              <Button
+                disabled={creatingOrder}
+                onClick={async () => {
+                  if (!boostTarget) return;
+                  setCreatingOrder(true);
+                  try {
+                    const res = await createMonetizationOrderApi({
+                      kind: 'boost_listing',
+                      targetId: boostTarget.id,
+                      tld: boostTarget.tld,
+                      provider,
+                      currency: provider === 'cryptobot' ? 'USDT' : 'RUB',
+                    });
+                    if (res.order) {
+                      setBoostTarget(null);
+                      setActiveOrder({
+                        order: res.order,
+                        payUrl: res.payUrl ?? null,
+                        instructions: res.instructions ?? '',
+                      });
+                      setOrderModalOpen(true);
+                    }
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Ошибка оплаты');
+                  } finally {
+                    setCreatingOrder(false);
+                  }
+                }}
+              >
+                Оплатить
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

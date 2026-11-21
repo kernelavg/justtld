@@ -393,3 +393,74 @@ CREATE TABLE IF NOT EXISTS zone_auction_bids (
 );
 CREATE INDEX IF NOT EXISTS zone_auction_bids_auction_idx
   ON zone_auction_bids (auction_id, amount_rub DESC, created_at DESC);
+
+-- ══════════ V4: Монетизация (копирайт PRO, P2P-перепродажа 10%, ТОП-лоты, реклама) ══════════
+
+DO $$
+BEGIN
+  ALTER TABLE payment_orders DROP CONSTRAINT IF EXISTS payment_orders_kind_chk;
+  ALTER TABLE payment_orders
+    ADD CONSTRAINT payment_orders_kind_chk
+    CHECK (kind IN (
+      'listing',
+      'custom_zone',
+      'custom_subdomain',
+      'renewal',
+      'auction',
+      'site_pro',
+      'boost_listing',
+      'boost_auction',
+      'ad_slot'
+    ));
+END $$;
+
+ALTER TABLE store_listings
+  ADD COLUMN IF NOT EXISTS seller_address text,
+  ADD COLUMN IF NOT EXISTS fee_percent int NOT NULL DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS is_featured boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS featured_until timestamptz;
+
+ALTER TABLE zone_auctions
+  ADD COLUMN IF NOT EXISTS is_featured boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS featured_until timestamptz;
+
+ALTER TABLE site_settings
+  ADD COLUMN IF NOT EXISTS pro_unlocked boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS pro_until timestamptz;
+
+CREATE TABLE IF NOT EXISTS seller_earnings (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  seller_address     text NOT NULL,
+  order_id           uuid NOT NULL REFERENCES payment_orders (id) ON DELETE CASCADE,
+  listing_id         uuid REFERENCES store_listings (id) ON DELETE SET NULL,
+  tld                text NOT NULL,
+  gross_rub          numeric(12, 2) NOT NULL,
+  fee_rub            numeric(12, 2) NOT NULL,
+  net_rub            numeric(12, 2) NOT NULL,
+  status             text NOT NULL DEFAULT 'available',
+  payout_destination text,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  paid_at            timestamptz,
+  CONSTRAINT seller_earnings_status_chk CHECK (status IN ('available', 'requested', 'paid'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seller_earnings_order_key ON seller_earnings (order_id);
+CREATE INDEX IF NOT EXISTS seller_earnings_seller_idx ON seller_earnings (seller_address, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ad_slots (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  placement     text NOT NULL,
+  title         text NOT NULL,
+  description   text NOT NULL,
+  cta_label     text NOT NULL DEFAULT 'Перейти',
+  target_url    text NOT NULL,
+  badge_text    text NOT NULL DEFAULT 'Реклама',
+  owner_address text,
+  order_id      uuid REFERENCES payment_orders (id) ON DELETE SET NULL,
+  is_active     boolean NOT NULL DEFAULT true,
+  starts_at     timestamptz NOT NULL DEFAULT now(),
+  ends_at       timestamptz NOT NULL,
+  clicks_count  int NOT NULL DEFAULT 0,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ad_slots_placement_chk CHECK (placement IN ('store_top', 'auctions_top', 'footer_sponsor'))
+);
+CREATE INDEX IF NOT EXISTS ad_slots_active_idx ON ad_slots (placement, is_active, ends_at DESC);

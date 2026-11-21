@@ -309,6 +309,56 @@ export const claimAuctionSchema = z.object({
   adminGrant: z.boolean().optional().default(false),
 });
 
+export const p2pListingCreateSchema = z.object({
+  tld: tldSchema,
+  subLabel: optionalSubLabelSchema,
+  title: z.string().trim().min(2, 'TITLE_EMPTY').max(120),
+  description: z.string().trim().max(400).optional().default(''),
+  priceRub: z.coerce.number().min(100).max(500_000),
+});
+
+export const monetizationOrderSchema = z.object({
+  kind: z.enum(['site_pro', 'boost_listing', 'boost_auction', 'ad_slot']),
+  provider: z.enum(['yoomoney', 'cryptobot', 'sandbox']).default('yoomoney'),
+  currency: z.enum(['RUB', 'USDT', 'TON', 'BTC', 'ETH']).default('RUB'),
+  tld: tldSchema.optional(),
+  subLabel: optionalSubLabelSchema,
+  targetId: z.string().uuid().optional(),
+  ad: z
+    .object({
+      placement: z.enum(['store_top', 'auctions_top', 'footer_sponsor']),
+      title: z.string().trim().min(3).max(90),
+      description: z.string().trim().min(3).max(200),
+      ctaLabel: z.string().trim().min(2).max(32).default('Открыть'),
+      targetUrl: z
+        .string()
+        .trim()
+        .url()
+        .refine((u) => u.startsWith('https://') || u.startsWith('http://'), 'URL_SCHEME'),
+      badgeText: z.string().trim().max(24).default('Реклама'),
+    })
+    .optional(),
+});
+
+export const adminAdSlotSchema = z.object({
+  placement: z.enum(['store_top', 'auctions_top', 'footer_sponsor']),
+  title: z.string().trim().min(3).max(90),
+  description: z.string().trim().min(3).max(200),
+  ctaLabel: z.string().trim().min(2).max(32).default('Перейти'),
+  targetUrl: z
+    .string()
+    .trim()
+    .url()
+    .refine((u) => u.startsWith('https://') || u.startsWith('http://'), 'URL_SCHEME'),
+  badgeText: z.string().trim().max(24).default('Реклама'),
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  isActive: z.boolean().default(true),
+});
+
+export const sellerPayoutRequestSchema = z.object({
+  destination: z.string().trim().min(4).max(160),
+});
+
 export type ZonesQuery = z.infer<typeof zonesQuerySchema>;
 export type SubdomainsQuery = z.infer<typeof subdomainsQuerySchema>;
 export type PrepareRegistrationInput = z.infer<typeof prepareRegistrationSchema>;

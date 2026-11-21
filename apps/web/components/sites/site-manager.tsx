@@ -2,7 +2,11 @@
 
 import * as React from 'react';
 import {
+  CheckCircle2,
   Code2,
+  Coins,
+  CreditCard,
+  Crown,
   ExternalLink,
   FilePlus2,
   FolderOpen,
@@ -14,12 +18,14 @@ import {
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { SiteFileDto, SiteSettingsDto } from '@justtld/shared';
+import type { PaymentOrderDto, PaymentProvider, SiteFileDto, SiteSettingsDto } from '@justtld/shared';
 import {
+  createMonetizationOrderApi,
   deleteSiteFile,
   getSiteFileContent,
   getSiteFiles,
   getSiteSubdomains,
+  getStoreOrder,
   saveSiteFile,
   updateSiteSettings,
 } from '@/lib/api';
@@ -28,7 +34,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
-import { Alert, AlertDescription, AlertTitle, Label } from '@/components/ui/primitives';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Label,
+} from '@/components/ui/primitives';
 
 type Props = {
   tld: string;
@@ -80,6 +96,14 @@ export function SiteManager({ tld, isOwner, hasSession, onRequireAuth }: Props) 
   const [newFilePath, setNewFilePath] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const [proModal, setProModal] = React.useState(false);
+  const [proProvider, setProProvider] = React.useState<PaymentProvider>('yoomoney');
+  const [proOrder, setProOrder] = React.useState<{
+    order: PaymentOrderDto;
+    payUrl: string | null;
+    instructions: string;
+  } | null>(null);
 
   const cleanTld = tld.replace(/^\./, '');
   const siteUrl = subLabel
@@ -440,8 +464,168 @@ export function SiteManager({ tld, isOwner, hasSession, onRequireAuth }: Props) 
               </Button>
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/25 p-3">
+            <div className="space-y-0.5 text-xs">
+              <div className="flex items-center gap-2 font-medium">
+                <Crown className="h-3.5 w-3.5 text-warning" />
+                <span>
+                  {settings?.proUnlocked
+                    ? 'PRO-сайт: плашка «Работает на JustTLD» отключена'
+                    : 'На сайте отображается плашка «Работает на JustTLD · @JustTLD»'}
+                </span>
+              </div>
+              <p className="text-muted-foreground">
+                {settings?.proUnlocked
+                  ? 'Чистый хостинг без фирменного бейджа в углу страницы.'
+                  : 'Отключите копирайт JustTLD навсегда для этого домена за 190 ₽ или 2 USDT.'}
+              </p>
+            </div>
+            {settings?.proUnlocked ? (
+              <Badge variant="success">PRO активен</Badge>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setProModal(true)}
+              >
+                Убрать плашку · 190 ₽
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      <Dialog open={proModal} onOpenChange={setProModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Отключить плашку «Работает на JustTLD»</DialogTitle>
+            <DialogDescription>
+              Домен <span className="mono font-medium">{subLabel ? `${subLabel}${tld}` : tld}</span>{' '}
+              перейдёт в PRO-режим навсегда. Стоимость: 190 ₽ или 2 USDT.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                proProvider === 'yoomoney' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="pro-provider"
+                  checked={proProvider === 'yoomoney'}
+                  onChange={() => setProProvider('yoomoney')}
+                />
+                <CreditCard className="h-4 w-4 text-primary" />
+                ЮMoney
+              </div>
+              <span className="font-semibold">190 ₽</span>
+            </label>
+            <label
+              className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 ${
+                proProvider === 'cryptobot' ? 'border-primary bg-primary/5' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="pro-provider"
+                  checked={proProvider === 'cryptobot'}
+                  onChange={() => setProProvider('cryptobot')}
+                />
+                <Coins className="h-4 w-4 text-primary" />
+                @CryptoBot
+              </div>
+              <span className="font-semibold">2 USDT</span>
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setProModal(false)}>
+              Отмена
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const res = await createMonetizationOrderApi({
+                    kind: 'site_pro',
+                    tld,
+                    subLabel,
+                    provider: proProvider,
+                    currency: proProvider === 'cryptobot' ? 'USDT' : 'RUB',
+                  });
+                  if (res.order) {
+                    setProModal(false);
+                    setProOrder({
+                      order: res.order,
+                      payUrl: res.payUrl ?? null,
+                      instructions: res.instructions ?? '',
+                    });
+                  }
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Ошибка создания счёта');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Перейти к оплате
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(proOrder)} onOpenChange={(o) => !o && setProOrder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Оплата PRO-режима</DialogTitle>
+            <DialogDescription>
+              {proOrder?.order.amount} {proOrder?.order.currency}
+            </DialogDescription>
+          </DialogHeader>
+          {proOrder && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{proOrder.instructions}</p>
+              {proOrder.order.status === 'pending' && proOrder.payUrl && (
+                <Button asChild size="lg" className="w-full gap-2">
+                  <a href={proOrder.payUrl} target="_blank" rel="noreferrer">
+                    Оплатить {proOrder.order.amount} {proOrder.order.currency}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
+              {proOrder.order.status === 'pending' && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-1.5"
+                  onClick={async () => {
+                    const res = await getStoreOrder(proOrder.order.id);
+                    setProOrder((prev) => (prev ? { ...prev, order: res.order } : prev));
+                    if (res.order.status === 'fulfilled') {
+                      toast.success('PRO активирован — плашка убрана!');
+                      setProOrder(null);
+                      await loadFiles();
+                    }
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Проверить оплату
+                </Button>
+              )}
+              {proOrder.order.status === 'fulfilled' && (
+                <div className="flex items-center gap-2 text-sm text-success">
+                  <CheckCircle2 className="h-4 w-4" />
+                  PRO-режим включён!
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {error && (
         <Alert variant="destructive">

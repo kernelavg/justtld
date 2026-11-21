@@ -1,6 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { ApiError, type PaymentOrderDto } from '@justtld/shared';
 import {
+  boostAuction,
+  boostStoreListing,
+  createAdSlot,
   createPaymentOrder,
   getCustody,
   getPaymentOrderById,
@@ -10,13 +13,15 @@ import {
   linkAuctionOrder,
   markAuctionSettled,
   markListingSold,
+  recordSellerEarning,
+  setSiteProUnlocked,
   updatePaymentOrder,
   upsertCustody,
   upsertSiteFile,
   upsertSiteSettings,
   listSiteFiles,
 } from '@justtld/db';
-import type { OrderKind, PaymentProvider } from '@justtld/shared';
+import type { AdPlacement, OrderKind, PaymentProvider } from '@justtld/shared';
 import {
   appUrl,
   cryptoBotToken,
@@ -412,26 +417,70 @@ export async function fulfillPaymentOrder(
   }
   if (order.status === 'fulfilled') return order;
 
-  const periodDays = Number(order.meta?.periodDays ?? 365) || 365;
+  if (order.kind === 'site_pro') {
+    await setSiteProUnlocked(order.tld, order.subLabel, true);
+  } else if (order.kind === 'boost_listing') {
+    const targetId = typeof order.meta?.targetId === 'string' ? order.meta.targetId : '';
+    if (targetId) await boostStoreListing(targetId, 7);
+  } else if (order.kind === 'boost_auction') {
+    const targetId = typeof order.meta?.targetId === 'string' ? order.meta.targetId : '';
+    if (targetId) await boostAuction(targetId, 7);
+  } else if (order.kind === 'ad_slot') {
+    const ad = (order.meta?.ad ?? {}) as Partial<{
+      placement: AdPlacement;
+      title: string;
+      description: string;
+      ctaLabel: string;
+      targetUrl: string;
+      badgeText: string;
+    }>;
+    if (ad.placement && ad.title && ad.targetUrl) {
+      await createAdSlot({
+        placement: ad.placement,
+        title: ad.title,
+        description: ad.description ?? '',
+        ctaLabel: ad.ctaLabel ?? 'Открыть',
+        targetUrl: ad.targetUrl,
+        badgeText: ad.badgeText ?? 'Реклама',
+        ownerAddress: order.buyerAddress,
+        orderId: order.id,
+        days: 7,
+        isActive: true,
+      });
+    }
+  } else {
+    const periodDays = Number(order.meta?.periodDays ?? 365) || 365;
 
-  await upsertCustody({
-    tld: order.tld,
-    subLabel: order.subLabel,
-    ownerAddress: order.buyerAddress,
-    source: 'order',
-    orderId: order.id,
-    periodDays,
-  });
+    await upsertCustody({
+      tld: order.tld,
+      subLabel: order.subLabel,
+      ownerAddress: order.buyerAddress,
+      source: 'order',
+      orderId: order.id,
+      periodDays,
+    });
 
-  if (order.listingId) {
-    await markListingSold(order.listingId, order.buyerAddress);
+    if (order.listingId) {
+      const listing = await getStoreListingById(order.listingId);
+      await markListingSold(order.listingId, order.buyerAddress);
+      if (listing?.sellerAddress && listing.sellerAddress !== order.buyerAddress.toLowerCase()) {
+        await recordSellerEarning({
+          sellerAddress: listing.sellerAddress,
+          orderId: order.id,
+          listingId: listing.id,
+          tld: listing.subLabel ? `${listing.subLabel}${listing.tld}` : listing.tld,
+          grossRub: listing.priceRub,
+          feePercent: listing.feePercent ?? 10,
+        });
+      }
+    }
+
+    if (order.kind === 'auction' && typeof order.meta?.auctionId === 'string') {
+      await markAuctionSettled(order.meta.auctionId, order.id);
+    }
+
+    await ensureStarterSite(order.tld, order.subLabel, order.buyerAddress);
   }
-
-  if (order.kind === 'auction' && typeof order.meta?.auctionId === 'string') {
-    await markAuctionSettled(order.meta.auctionId, order.id);
-  }
-
-  await ensureStarterSite(order.tld, order.subLabel, order.buyerAddress);
 
   const updated = await updatePaymentOrder(order.id, {
     status: 'fulfilled',
@@ -441,6 +490,98 @@ export async function fulfillPaymentOrder(
     txHash: extra?.txHash ?? undefined,
   });
   return updated ?? order;
+}
+
+export const MONETIZATION_PRICES = {
+  site_pro: { rub: 190, usdt: 2, label: 'PRO без копирайта' },
+  boost_listing: { rub: 99, usdt: 1, label: 'ТОП-лот на 7 дней' },
+  boost_auction: { rub: 99, usdt: 1, label: 'ТОП-аукцион на 7 дней' },
+  ad_slot: { rub: 290, usdt: 3, label: 'Рекламный блок на 7 дней' },
+} as const;
+
+export async function createMonetizationOrder(input: {
+  buyerAddress: string;
+  buyerEmail?: string | null;
+  kind: 'site_pro' | 'boost_listing' | 'boost_auction' | 'ad_slot';
+  tld?: string;
+  subLabel?: string;
+  targetId?: string;
+  ad?: {
+    placement: AdPlacement;
+    title: string;
+    description: string;
+    ctaLabel: string;
+    targetUrl: string;
+    badgeText: string;
+  };
+  provider: PaymentProvider;
+  currency?: string;
+}): Promise<{ order: PaymentOrderDto; payUrl: string | null; instructions: string }> {
+  if (input.provider === 'sandbox' && !paymentsSandbox()) {
+    throw ApiError.forbidden('Тестовая оплата (Sandbox) отключена');
+  }
+
+  const price = MONETIZATION_PRICES[input.kind];
+  const currency =
+    input.provider === 'yoomoney'
+      ? 'RUB'
+      : input.provider === 'cryptobot'
+        ? (input.currency && input.currency !== 'RUB' ? input.currency : 'USDT')
+        : 'RUB';
+  const amount = currency === 'RUB' ? price.rub.toFixed(2) : price.usdt.toFixed(2);
+  const tld = (input.tld ?? '.site').toLowerCase();
+  const subLabel = (input.subLabel ?? '').toLowerCase();
+
+  const order = await createPaymentOrder({
+    buyerAddress: input.buyerAddress,
+    buyerEmail: input.buyerEmail ?? null,
+    tld,
+    subLabel,
+    kind: input.kind,
+    listingId: null,
+    provider: input.provider,
+    currency,
+    amount,
+    meta: {
+      targetId: input.targetId ?? null,
+      ad: input.ad ?? null,
+    },
+  });
+
+  if (input.provider === 'yoomoney') {
+    const payUrl = buildYooMoneyQuickpayUrl(order);
+    const updated = (await updatePaymentOrder(order.id, { payUrl })) ?? order;
+    return {
+      order: updated,
+      payUrl,
+      instructions: `Оплатите «${price.label}» через ЮMoney — опция активируется автоматически.`,
+    };
+  }
+
+  if (input.provider === 'cryptobot') {
+    const inv = await createCryptoBotInvoice({
+      orderId: order.id,
+      amount,
+      asset: currency,
+      description: `JustTLD: ${price.label}`,
+    });
+    const updated =
+      (await updatePaymentOrder(order.id, {
+        externalId: inv.invoiceId,
+        payUrl: inv.payUrl,
+      })) ?? order;
+    return {
+      order: updated,
+      payUrl: inv.payUrl,
+      instructions: 'Оплатите счёт в @CryptoBot и нажмите «Проверить оплату».',
+    };
+  }
+
+  return {
+    order,
+    payUrl: null,
+    instructions: 'Счёт создан в тестовом режиме (Sandbox).',
+  };
 }
 
 /** Создаёт счёт на оплату выигранного аукциона по итоговой ставке. */
