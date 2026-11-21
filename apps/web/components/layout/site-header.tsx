@@ -76,8 +76,8 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/75 backdrop-blur-xl">
-      <div className="container flex h-14 items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
+      <div className="container flex h-14 items-center justify-between gap-2 sm:gap-4">
+        <div className="flex min-w-0 items-center gap-6">
           <Link href="/" className="group flex shrink-0 items-center gap-2.5">
             <img
               src="/brand/icon.png"
@@ -113,18 +113,17 @@ export function SiteHeader() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
+            className="h-8 gap-1 px-2 text-[11px] font-medium uppercase"
             aria-label={t('common.language')}
             onClick={() => setLanguage(language === 'ru' ? 'en' : 'ru')}
             title={language === 'ru' ? 'Switch to English' : 'Переключить на русский'}
           >
-            <span className="flex items-center gap-0.5 text-[11px] font-medium uppercase">
-              <Globe className="h-3.5 w-3.5" />
-              {language}
-            </span>
+            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <span>{language}</span>
           </Button>
 
           <Button
