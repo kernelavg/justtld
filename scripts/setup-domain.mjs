@@ -37,6 +37,16 @@ if (!DOMAIN) {
 
 const log = (...parts) => console.log(...parts);
 
+/** NS домена по данным Cloudflare DoH: подсказывает, переключена ли делегация. */
+async function checkNameservers(domain) {
+  const response = await fetch(
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=NS`,
+    { headers: { accept: 'application/dns-json' } },
+  );
+  const body = await response.json().catch(() => ({}));
+  return (body.Answer ?? []).map((answer) => String(answer.data).replace(/\.$/, ''));
+}
+
 async function cf(path, init = {}) {
   const response = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
     ...init,
@@ -210,6 +220,19 @@ async function verify() {
 }
 
 try {
+  const nameservers = await checkNameservers(DOMAIN);
+  if (nameservers.length === 0) {
+    log(`\n⚠️  ${DOMAIN} пока не делегирован (NXDOMAIN или регистрация ещё обрабатывается).`);
+    log(
+      '   Переключите NS домена на Cloudflare и дождитесь статуса Active — потом запускайте снова.',
+    );
+  } else if (!nameservers.some((ns) => ns.includes('cloudflare'))) {
+    log(`\n⚠️  NS домена: ${nameservers.join(', ')} — это не Cloudflare.`);
+    log('   В панели регистратора укажите два NS из Cloudflare (Add a site → план Free).');
+  } else {
+    log(`\n✅ NS домена уже на Cloudflare: ${nameservers.join(', ')}`);
+  }
+
   if (!renderOnly) {
     if (!CF_TOKEN && !dryRun)
       throw new Error('Нужен CF_API_TOKEN (Cloudflare → My Profile → API Tokens)');
