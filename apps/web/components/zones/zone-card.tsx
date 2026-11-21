@@ -14,7 +14,7 @@ export function ZoneCard({ zone }: { zone: ZoneDto }) {
   const days = daysUntil(zone.expiresAt);
 
   return (
-    <Card className="transition-colors hover:border-primary/50">
+    <Card className="card-hover">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <Link href={`/zone/${zone.tld}`} className="group flex items-center gap-1">

@@ -36,6 +36,8 @@ const nextConfig = {
     NEXT_PUBLIC_CHAIN_NAME: process.env.NEXT_PUBLIC_CHAIN_NAME ?? 'JustTLD Local Devnet',
     NEXT_PUBLIC_ENABLE_DEV_WALLET: process.env.NEXT_PUBLIC_ENABLE_DEV_WALLET ?? 'true',
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+    NEXT_PUBLIC_RESOLVER_DOMAIN:
+      process.env.RESOLVER_DOMAIN ?? process.env.NEXT_PUBLIC_RESOLVER_DOMAIN ?? 'justtld.online',
   },
 };
 

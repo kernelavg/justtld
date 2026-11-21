@@ -7,8 +7,9 @@ import { isAddress } from 'viem';
 import { METADATA_MAX_LENGTH } from '@justtld/shared';
 import type { ZoneDto } from '@justtld/shared';
 import { Button } from '@/components/ui/button';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/primitives';
+import { MetadataEditor } from '@/components/zones/metadata-editor';
 import {
   Dialog,
   DialogContent,
@@ -194,21 +195,17 @@ export function ZoneActions({
 
       {/* Метаданные */}
       <Dialog open={action === 'metadata'} onOpenChange={(open) => !open && close()}>
-        <DialogContent>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{t('zone.metadataTitle')}</DialogTitle>
             <DialogDescription>{t('zone.metadataDesc')}</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitMetadata} className="space-y-4">
-            <Textarea
-              className="mono text-xs"
+            <MetadataEditor
               value={metadataValue}
-              maxLength={METADATA_MAX_LENGTH}
-              onChange={(event) => setMetadataValue(event.target.value)}
+              onChange={setMetadataValue}
+              idPrefix="zone-meta"
             />
-            <p className="text-xs text-muted-foreground">
-              {metadataValue.length}/{METADATA_MAX_LENGTH}
-            </p>
             <TxStatus state={metadata.state} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={close}>
@@ -216,7 +213,11 @@ export function ZoneActions({
               </Button>
               <Button
                 type="submit"
-                disabled={metadata.state.phase === 'pending' || metadata.state.phase === 'signing'}
+                disabled={
+                  new TextEncoder().encode(metadataValue).length > METADATA_MAX_LENGTH ||
+                  metadata.state.phase === 'pending' ||
+                  metadata.state.phase === 'signing'
+                }
               >
                 {t('common.confirm')}
               </Button>

@@ -147,6 +147,9 @@ export default function HomePage() {
               <Button asChild size="lg" variant="outline">
                 <Link href="/zones">{t('home.ctaExplore')}</Link>
               </Button>
+              <Button asChild size="lg" variant="ghost">
+                <Link href="/subdomains">{t('nav.subdomains')}</Link>
+              </Button>
             </div>
           </div>
         </div>

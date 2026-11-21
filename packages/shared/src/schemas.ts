@@ -52,6 +52,22 @@ export const zonesQuerySchema = z.object({
   sort: zoneSortSchema,
 });
 
+export const subdomainsQuerySchema = z.object({
+  page: pageSchema,
+  limit: limitSchema,
+  status: zoneStatusFilterSchema,
+  tld: z
+    .string()
+    .trim()
+    .max(64)
+    .transform(normalizeTld)
+    .optional(),
+  owner: addressSchema.optional(),
+  scope: z.enum(['any', 'owner', 'zone_owner']).default('any'),
+  q: z.string().trim().max(64).optional(),
+  sort: z.enum(['newest', 'oldest', 'name', 'expires_soon']).default('newest'),
+});
+
 export const historyQuerySchema = z.object({
   page: pageSchema,
   limit: limitSchema,
@@ -161,6 +177,7 @@ export const confirmTxSchema = z.object({
 });
 
 export type ZonesQuery = z.infer<typeof zonesQuerySchema>;
+export type SubdomainsQuery = z.infer<typeof subdomainsQuerySchema>;
 export type PrepareRegistrationInput = z.infer<typeof prepareRegistrationSchema>;
 export type PrepareSubdomainRegistrationInput = z.infer<typeof prepareSubdomainRegistrationSchema>;
 export type PrepareSubdomainTransferInput = z.infer<typeof prepareSubdomainTransferSchema>;

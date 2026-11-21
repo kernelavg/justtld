@@ -6,6 +6,7 @@ import type {
   SubdomainDto,
   SubdomainEventDto,
   SubdomainEventType,
+  SubdomainsQuery,
   TransferRequestDto,
   ZoneDto,
   ZoneEventDto,
@@ -933,6 +934,75 @@ export async function refreshExpiredSubdomainStatuses(): Promise<number> {
 export async function countSubdomains(): Promise<number> {
   const row = await queryOne<{ count: string }>('SELECT count(*)::text AS count FROM subdomains');
   return Number(row?.count ?? 0);
+}
+
+export async function countSubdomainsByZone(tld: string): Promise<number> {
+  const row = await queryOne<{ count: string }>(
+    'SELECT count(*)::text AS count FROM subdomains WHERE tld = $1',
+    [tld.toLowerCase()],
+  );
+  return Number(row?.count ?? 0);
+}
+
+const SUBDOMAIN_SORT_SQL: Record<SubdomainsQuery['sort'], string> = {
+  newest: 'registered_at DESC, name ASC',
+  oldest: 'registered_at ASC, name ASC',
+  name: 'name ASC',
+  expires_soon: 'expires_at ASC, name ASC',
+};
+
+export async function listSubdomains(query: SubdomainsQuery): Promise<Paginated<SubdomainDto>> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (query.status !== 'all') {
+    params.push(query.status);
+    where.push(`status = $${params.length}`);
+  }
+  if (query.tld && query.tld !== '.') {
+    params.push(query.tld.toLowerCase());
+    where.push(`tld = $${params.length}`);
+  }
+  if (query.owner) {
+    params.push(query.owner.toLowerCase());
+    const idx = `$${params.length}`;
+    if (query.scope === 'owner') {
+      where.push(`owner_address = ${idx}`);
+    } else if (query.scope === 'zone_owner') {
+      where.push(`zone_owner_address = ${idx}`);
+    } else {
+      where.push(`(owner_address = ${idx} OR zone_owner_address = ${idx})`);
+    }
+  }
+  if (query.q && query.q.length > 0) {
+    params.push(`%${query.q.toLowerCase()}%`);
+    where.push(`(name ILIKE $${params.length} OR owner_address ILIKE $${params.length})`);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const orderSql = SUBDOMAIN_SORT_SQL[query.sort];
+  const offset = (query.page - 1) * query.limit;
+
+  const totalRow = await queryOne<{ count: string }>(
+    `SELECT count(*)::text AS count FROM subdomains ${whereSql}`,
+    params,
+  );
+  const total = Number(totalRow?.count ?? 0);
+
+  const listParams = [...params, query.limit, offset];
+  const rows = await queryRows<SubdomainRow>(
+    `SELECT ${SUBDOMAIN_COLUMNS} FROM subdomains ${whereSql}
+     ORDER BY ${orderSql} LIMIT $${listParams.length - 1} OFFSET $${listParams.length}`,
+    listParams,
+  );
+
+  return {
+    items: rows.map(toSubdomainDto),
+    page: query.page,
+    limit: query.limit,
+    total,
+    pages: Math.max(1, Math.ceil(total / query.limit)),
+  };
 }
 
 /* ------------------------------------------------------------------ */

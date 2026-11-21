@@ -18,6 +18,7 @@ const RESERVED_PATHS = new Set([
   'explorer',
   'register',
   'resolve',
+  'subdomains',
   'tx',
   'zone',
   'zones',

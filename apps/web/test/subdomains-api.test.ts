@@ -42,6 +42,8 @@ const state = {
 const dbMock = {
   getZoneByTld: vi.fn(async () => state.zone),
   listSubdomainsByZone: vi.fn(async () => state.subdomainsList),
+  listSubdomains: vi.fn(async () => state.subdomainsList),
+  countSubdomainsByZone: vi.fn(async () => 0),
   refreshExpiredSubdomainStatuses: vi.fn(async () => 0),
   getSubdomainByName: vi.fn(async () => state.subdomainCache),
   listSubdomainEvents: vi.fn(async () => state.events),
@@ -103,6 +105,7 @@ vi.mock('@/lib/server/chain', async (importOriginal) => {
 });
 
 const { GET: listSubdomains } = await import('@/app/api/zones/[tld]/subdomains/route');
+const { GET: listAllSubdomains } = await import('@/app/api/subdomains/route');
 const { GET: getSubdomain } = await import('@/app/api/zones/[tld]/subdomains/[label]/route');
 const { POST: prepareRegistration } =
   await import('@/app/api/subdomains/prepare-registration/route');
@@ -568,5 +571,43 @@ describe('защита prepare-маршрутов', () => {
     const response = await send();
     expect(response.status).toBe(429);
     expect(response.headers.get('retry-after')).toBeTruthy();
+  });
+});
+
+describe('GET /api/subdomains (общий каталог)', () => {
+  it('возвращает enabled=false и пустой список, если контракт не подключён', async () => {
+    state.enabled = false;
+    const response = await listAllSubdomains(get('/api/subdomains'));
+    expect(response.status).toBe(200);
+    expect(await bodyOf(response)).toMatchObject({ enabled: false, contract: null, items: [] });
+    expect(dbMock.listSubdomains).not.toHaveBeenCalled();
+  });
+
+  it('передаёт фильтры owner, scope, status и q в репозиторий', async () => {
+    state.subdomainsList = {
+      items: [{ id: '1', name: 'blog.femboy', label: 'blog', tld: '.femboy', status: 'active' }],
+      total: 1,
+      page: 1,
+      limit: 18,
+      pages: 1,
+    };
+    const response = await listAllSubdomains(
+      get(`/api/subdomains?owner=${ZONE_OWNER}&scope=owner&status=active&q=blog&limit=18`),
+    );
+    expect(response.status).toBe(200);
+    expect(await bodyOf(response)).toMatchObject({
+      enabled: true,
+      contract: '0xa6565Dc205b2Af794ff4582dB1A6438CDF922c35',
+      total: 1,
+    });
+    expect(dbMock.listSubdomains).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: ZONE_OWNER_LC,
+        scope: 'owner',
+        status: 'active',
+        q: 'blog',
+        limit: 18,
+      }),
+    );
   });
 });

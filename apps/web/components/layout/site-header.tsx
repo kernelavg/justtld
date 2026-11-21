@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 const NAV: Array<{ href: string; key: TranslationKey }> = [
   { href: '/', key: 'nav.home' },
   { href: '/zones', key: 'nav.zones' },
+  { href: '/subdomains', key: 'nav.subdomains' },
   { href: '/register', key: 'nav.register' },
   { href: '/dashboard', key: 'nav.dashboard' },
   { href: '/admin', key: 'nav.admin' },

@@ -13,6 +13,7 @@ export const dictionary = {
   },
   'nav.home': { ru: 'Главная', en: 'Home' },
   'nav.zones': { ru: 'Зоны', en: 'Zones' },
+  'nav.subdomains': { ru: 'Поддомены', en: 'Subdomains' },
   'nav.register': { ru: 'Регистрация', en: 'Register' },
   'nav.dashboard': { ru: 'Кабинет', en: 'Dashboard' },
   'nav.admin': { ru: 'Админ', en: 'Admin' },
@@ -248,6 +249,7 @@ export const dictionary = {
     en: 'Connect a wallet to see your zones.',
   },
   'dashboard.myZones': { ru: 'Мои зоны', en: 'My zones' },
+  'dashboard.mySubdomains': { ru: 'Мои поддомены', en: 'My subdomains' },
   'dashboard.empty': {
     ru: 'У этого адреса пока нет зон.',
     en: 'This address has no zones yet.',

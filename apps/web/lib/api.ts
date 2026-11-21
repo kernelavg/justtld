@@ -106,8 +106,23 @@ export const getZone = (tld: string) =>
       metadata: string;
     } | null;
     consistent: boolean;
+    subdomainsCount?: number;
+    subdomainsEnabled?: boolean;
+    subdomainsContract?: string | null;
+    gracePeriodDays?: number;
+    graceEndsAt?: string | null;
+    explorer?: {
+      confirmedAt: string;
+      chainId: number;
+      txUrlTemplate: string | null;
+    };
     transfers: TransferRequestDto[];
   }>(`/api/zones/${encodeURIComponent(tld)}`);
+
+export const getSubdomains = (query = '') =>
+  apiFetch<Paginated<SubdomainDto> & { enabled: boolean; contract: string | null }>(
+    `/api/subdomains${query ? `?${query}` : ''}`,
+  );
 export const getZoneHistory = (tld: string, query = '') =>
   apiFetch<Paginated<ZoneEventDto> & { tld: string }>(
     `/api/zones/${encodeURIComponent(tld)}/history${query ? `?${query}` : ''}`,

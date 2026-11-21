@@ -85,9 +85,18 @@ describe('резолвер: формы имени', () => {
   });
 
   it('служебные пути на хосте зоны отдают сайт, а не резолвер', async () => {
-    for (const path of ['/zones', '/docs', '/explorer', '/dashboard', '/api/health', '/zone']) {
+    for (const path of [
+      '/zones',
+      '/subdomains',
+      '/docs',
+      '/explorer',
+      '/dashboard',
+      '/api/health',
+      '/zone',
+    ]) {
       expect(rewriteOf(await run('justtld-demo.justtld.online', path))).toBeNull();
     }
+    expect(rewriteOf(await run(DOMAIN, '/subdomains'))).toBeNull();
   });
 
   it('не перехватывает метку с недопустимыми символами', async () => {
