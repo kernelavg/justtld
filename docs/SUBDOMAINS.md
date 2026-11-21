@@ -126,36 +126,24 @@ node scripts/setup-zone-hosts.mjs justtld-demo
 node scripts/setup-zone-hosts.mjs --all        # все зоны из /api/zones
 ```
 
-**Статус: не включено.** Проверка на живом аккаунте (ноябрь 2026) упёрлась в две вещи, которых
-на бесплатном тарифе нет:
+**Статус: невозможно на бесплатном тарифе.** Проверили всё, что предлагает Cloudflare
+и Render (ноябрь 2026), — рабочий путь упирается в тарифы на каждом шаге:
 
-1. создание зоны требует права уровня аккаунта (`com.cloudflare.api.account.zone.create`);
-   токен со правами на все зоны (`Zone:Edit`, `DNS:Edit`, `Transform Rules:Edit`,
-   `Origin Rules:Edit`) всё равно получает отказ;
-2. подмена `Host` в Origin Rules — платная функция: API отвечает
-   `not entitled to use the HostHeader override`, без неё Render не примет запрос;
-   вместо неё нужен Worker-прокси (бесплатные 100 тыс. запросов в сутки), который сам ходит
-   на `justtld.onrender.com` и передаёт исходное имя в `X-Forwarded-Host`.
+| Что пробовали | Ответ |
+| --- | --- |
+| Сертификат на `*.*.justtld.online` | не выдаёт ни один публичный CA, маски только на один уровень |
+| Расширенный сертификат Cloudflare (`*.zone.justtld.online`) | Advanced Certificate Manager, $10/мес |
+| Отдельная зона Cloudflare на каждый поддомен | «Subdomain setup» — только Enterprise. API: `Please ensure you are providing the root domain`; `type: partial` → `Partial zone signup not allowed` |
+| Прокси Cloudflare с подменой `Host` | `not entitled to use the HostHeader override` — платная функция |
+| Ещё один wildcard-домен в Render | лимит бесплатного плана — 2 домена, оба заняты (`justtld.online`, `*.justtld.online`) |
 
-Плюс поправка по фазам: заголовок запроса меняется в `http_request_late_transform`, а не в
-`http_request_transform` (оттуда ответ `header rewrites not allowed`).
+Попутно выяснилось: заголовки запроса меняются в фазе `http_request_late_transform`
+(в `http_request_transform` — `header rewrites not allowed`).
 
-Поэтому включёнными остаются три формы без второго уровня: `/зона/метка`, `метка--зона`, `зона.домен/метка`.
-Скрипт ниже оставлен как заготовка на случай, если понадобятся настоящие хосты второго уровня.
-
-Скрипту нужен токен Cloudflare (My Profile → API Tokens → Create Custom Token) с правами:
-
-| Разрешение в дашборде | API-имя | Зачем |
-| --- | --- | --- |
-| Zone → Zone → Edit | `Zone Write` | создать дочернюю зону |
-| Zone → DNS → Edit | `DNS Write` | NS-делегирование и записи дочерней зоны |
-| Zone → Transform Rules → Edit | `Zone Transform Rules Write` | заголовок `X-Forwarded-Host` |
-| Zone → Origin Rules → Edit | `Zone Origin Rules Write` | подмена `Host` на адрес Render |
-
-Ресурсы зон: **All zones from an account**. Токен «только DNS одной зоны» не подойдёт:
-без права создавать зоны скрипт падает на `com.cloudflare.api.account.zone.create`.
-Права `Config Rules` для этого бесполезны — это другой продукт Cloudflare.
-Сертификат дочерней зоны Cloudflare выпускает обычно за 5–15 минут после делегирования NS.
+Заготовка скрипта для схемы «зона Cloudflare на каждую зону JustTLD» лежит в
+`docs/archive/zone-hosts-cloudflare.mjs.txt` — она заработает, если появится тариф
+с subdomain setup или ACM. Включёнными остаются три формы без второго уровня:
+`/зона/метка`, `метка--зона`, `зона.домен/метка`.
 
 ### Почему поддомен в хосте пишется через `--`
 
