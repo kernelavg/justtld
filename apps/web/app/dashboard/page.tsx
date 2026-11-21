@@ -24,29 +24,39 @@ import { useApiData } from '@/lib/hooks';
 import { getSession, signInWithWallet, signOut, type SessionResponse } from '@/lib/api';
 import { buildResolverLinks, parseZoneMetadata } from '@/lib/metadata';
 import { CopyUrlButton, useResolverDomain } from '@/components/zones/resolver-links';
+import { EmailAuthCard } from '@/components/auth/email-auth-card';
 
 export default function DashboardPage() {
   const { t, language } = useI18n();
   const wallet = useWallet();
   const resolverDomain = useResolverDomain();
   const [session, setSession] = React.useState<SessionResponse['session']>(null);
+  const [account, setAccount] = React.useState<SessionResponse['account']>(null);
   const [sessionLoading, setSessionLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
 
+  const activeAddress = wallet.address ?? session?.address ?? null;
+
   const zones = useApiData<Paginated<ZoneDto>>(
-    wallet.address ? `/api/zones?owner=${wallet.address}&limit=100` : null,
-    [wallet.address],
+    activeAddress ? `/api/zones?owner=${activeAddress}&limit=100` : null,
+    [activeAddress],
   );
   const subdomains = useApiData<Paginated<SubdomainDto>>(
-    wallet.address ? `/api/subdomains?owner=${wallet.address}&limit=100` : null,
-    [wallet.address],
+    activeAddress ? `/api/subdomains?owner=${activeAddress}&limit=100` : null,
+    [activeAddress],
   );
 
   const loadSession = React.useCallback(() => {
     setSessionLoading(true);
     getSession()
-      .then((result) => setSession(result.session))
-      .catch(() => setSession(null))
+      .then((result) => {
+        setSession(result.session);
+        setAccount(result.account ?? null);
+      })
+      .catch(() => {
+        setSession(null);
+        setAccount(null);
+      })
       .finally(() => setSessionLoading(false));
   }, []);
 
@@ -72,6 +82,7 @@ export default function DashboardPage() {
   const doSignOut = async () => {
     await signOut().catch(() => undefined);
     setSession(null);
+    setAccount(null);
     toast.success(t('dashboard.signOut'));
   };
 
@@ -89,9 +100,14 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
-          {wallet.address ? (
+          {account ? (
+            <Badge variant="outline" className="px-3 py-1">
+              {account.email}
+            </Badge>
+          ) : null}
+          {activeAddress ? (
             <Badge variant="outline" className="mono px-3 py-1">
-              {shortenAddress(wallet.address, 6)}
+              {shortenAddress(activeAddress, 6)}
             </Badge>
           ) : (
             <span className="text-sm text-muted-foreground">{t('dashboard.connectPrompt')}</span>
@@ -152,6 +168,19 @@ export default function DashboardPage() {
         </p>
       )}
 
+      {!activeAddress && (
+        <div className="mt-6">
+          <EmailAuthCard
+            title="Вход в кабинет по Email и паролю"
+            description="Или подключите криптокошелёк в правом верхнем углу сайта."
+            onSuccess={({ session: s, account: acc }) => {
+              setSession(s);
+              setAccount(acc);
+            }}
+          />
+        </div>
+      )}
+
       <Tabs defaultValue="zones" className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
@@ -184,7 +213,7 @@ export default function DashboardPage() {
               <CardTitle className="text-base">{t('dashboard.myZones')}</CardTitle>
             </CardHeader>
             <CardContent>
-              {!wallet.address ? (
+              {!activeAddress ? (
                 <p className="p-4 text-sm text-muted-foreground">{t('dashboard.connectPrompt')}</p>
               ) : zones.loading ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -247,6 +276,12 @@ export default function DashboardPage() {
 
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <Link
+                            href={`/zone/${zone.tld}?tab=site`}
+                            className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 font-medium text-primary hover:bg-primary/10"
+                          >
+                            Сайт и DNS
+                          </Link>
+                          <Link
                             href={`/zone/${zone.tld}?tab=subdomains`}
                             className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-muted-foreground hover:border-primary/40 hover:text-foreground"
                           >
@@ -292,7 +327,7 @@ export default function DashboardPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              {!wallet.address ? (
+              {!activeAddress ? (
                 <p className="p-4 text-sm text-muted-foreground">{t('dashboard.connectPrompt')}</p>
               ) : subdomains.loading ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -125,6 +125,8 @@ export type RouteOptions = {
   limit?: RateLimitKind;
   /** Дополнительный сегмент ключа (например, имя маршрута). */
   bucket?: string;
+  /** Отключает проверку Origin/Content-Type (для внешних платежных webhook'ов). */
+  skipOriginCheck?: boolean;
 };
 
 type Handler = (request: Request, context?: unknown) => Promise<Response>;
@@ -150,7 +152,7 @@ export function route(handler: Handler, options: RouteOptions = {}): Handler {
         );
       }
 
-      assertSameOrigin(request);
+      if (!options.skipOriginCheck) assertSameOrigin(request);
 
       const response = await handler(request, context);
       for (const [key, value] of Object.entries(rateLimitHeaders(result))) {

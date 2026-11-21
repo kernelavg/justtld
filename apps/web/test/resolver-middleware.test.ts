@@ -37,27 +37,30 @@ describe('резолвер: формы имени', () => {
     process.env.RESOLVER_DOMAIN = DOMAIN;
   });
 
-  it('зона по поддомену: justtld-demo.justtld.online', async () => {
+  it('зона по поддомену: justtld-demo.justtld.online → сайт зоны', async () => {
     const response = await run('justtld-demo.justtld.online');
-    expect(rewriteOf(response)?.pathname).toBe('/resolve');
-    expect(queryOf(response)).toEqual({ zone: 'justtld-demo' });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', path: '/' });
   });
 
   it('плоский поддомен: blog--justtld-demo.justtld.online', async () => {
     const response = await run('blog--justtld-demo.justtld.online');
-    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', label: 'blog' });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', label: 'blog', path: '/' });
   });
 
   it('поддомен путём на хосте зоны: justtld-demo.justtld.online/blog', async () => {
     const response = await run('justtld-demo.justtld.online', '/blog');
-    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', label: 'blog', via: 'path' });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', path: '/blog' });
   });
 
   it('двухуровневый хост через X-Forwarded-Host (запрос пришёл на адрес Render)', async () => {
     const response = await run('justtld.onrender.com', '/', {
       'x-forwarded-host': 'blog.justtld-demo.justtld.online',
     });
-    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', label: 'blog' });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({ zone: 'justtld-demo', label: 'blog', path: '/' });
   });
 
   it('игнорирует X-Forwarded-Host с чужого домена', async () => {
@@ -69,7 +72,7 @@ describe('резолвер: формы имени', () => {
 
   it('не путает зону с меткой: дефис в имени не делит имя', async () => {
     const response = await run('my-zone.justtld.online');
-    expect(queryOf(response)).toEqual({ zone: 'my-zone' });
+    expect(queryOf(response)).toEqual({ zone: 'my-zone', path: '/' });
   });
 
   it('служебные хосты не перехватываются', async () => {
@@ -84,8 +87,9 @@ describe('резолвер: формы имени', () => {
     expect(rewriteOf(await run('example.com'))).toBeNull();
   });
 
-  it('служебные пути на хосте зоны отдают сайт, а не резолвер', async () => {
+  it('служебные пути на основном домене не перехватываются, а /api на хосте зоны не переписывается', async () => {
     for (const path of [
+      '/store',
       '/zones',
       '/subdomains',
       '/docs',
@@ -94,13 +98,16 @@ describe('резолвер: формы имени', () => {
       '/api/health',
       '/zone',
     ]) {
-      expect(rewriteOf(await run('justtld-demo.justtld.online', path))).toBeNull();
+      expect(rewriteOf(await run(DOMAIN, path))).toBeNull();
     }
-    expect(rewriteOf(await run(DOMAIN, '/subdomains'))).toBeNull();
+    expect(rewriteOf(await run('justtld-demo.justtld.online', '/api/health'))).toBeNull();
+    expect(rewriteOf(await run('justtld-demo.justtld.online', '/style.css'))?.pathname).toBe(
+      '/api/site-serve',
+    );
   });
 
-  it('не перехватывает метку с недопустимыми символами', async () => {
-    expect(rewriteOf(await run('justtld-demo.justtld.online', '/bad!label'))).toBeNull();
+  it('не перехватывает метку с недопустимыми символами на основном домене', async () => {
+    expect(rewriteOf(await run('justtld.online', '/bad!label'))).toBeNull();
     expect(rewriteOf(await run('justtld.online', '/justtld-demo/blog/post'))).toBeNull();
   });
 

@@ -6,7 +6,7 @@ import { closePool, databaseUrl, getPool } from './pool';
 loadRootEnv();
 
 const SCHEMA_FILE = path.join(__dirname, 'schema.sql');
-const VERSION = '2026-11-20-justtld-initial';
+const VERSION = '2026-11-21-justtld-store-sites-dns';
 
 /** Применяет schema.sql (идемпотентно) и фиксирует версию миграции. */
 export async function runMigrations(verbose = true): Promise<void> {

@@ -10,22 +10,33 @@ import {
   CalendarClock,
   CheckCircle2,
   ExternalLink,
+  Globe,
   History,
   Layers,
+  Network,
+  Plus,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useI18n } from '@/lib/i18n';
 import { useApiData } from '@/lib/hooks';
 import { useWallet } from '@/lib/wallet';
+import {
+  createCustodySubdomain,
+  getSession,
+  getSiteSubdomains,
+  type SessionResponse,
+} from '@/lib/api';
 import {
   daysUntil,
   formatDate,
   formatDateTime,
   normalizeTld,
   shortenAddress,
+  type ZoneCustodyDto,
   type ZoneDto,
   type ZoneEventDto,
   type Paginated,
@@ -34,6 +45,11 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   Skeleton,
   Tabs,
   TabsContent,
@@ -43,12 +59,16 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ZoneStatusBadge } from '@/components/zones/status-badge';
 import { ZoneActions } from '@/components/zones/zone-actions';
 import { ZoneSubdomains } from '@/components/zones/subdomains';
 import { useExplorerUrl } from '@/components/tx/tx-status';
 import { parseZoneMetadata } from '@/lib/metadata';
 import { CopyUrlButton, ResolverLinksCard } from '@/components/zones/resolver-links';
+import { SiteManager } from '@/components/sites/site-manager';
+import { DnsManager } from '@/components/sites/dns-manager';
+import { EmailAuthCard } from '@/components/auth/email-auth-card';
 
 type ZoneResponse = {
   zone: ZoneDto | null;
@@ -85,10 +105,20 @@ export default function ZonePage() {
   const txUrl = useExplorerUrl();
 
   const initialTab = searchParams.get('tab');
-  const [tab, setTab] = React.useState<'overview' | 'subdomains' | 'history'>(
-    initialTab === 'subdomains' || initialTab === 'history' ? initialTab : 'overview',
+  const [tab, setTab] = React.useState<'overview' | 'site' | 'dns' | 'subdomains' | 'history'>(
+    initialTab === 'site' ||
+      initialTab === 'dns' ||
+      initialTab === 'subdomains' ||
+      initialTab === 'history'
+      ? initialTab
+      : 'overview',
   );
   const [showRawMeta, setShowRawMeta] = React.useState(false);
+  const [sessionState, setSessionState] = React.useState<SessionResponse | null>(null);
+  const [authDialogOpen, setAuthDialogOpen] = React.useState(false);
+  const [custodySubs, setCustodySubs] = React.useState<ZoneCustodyDto[]>([]);
+  const [newSubLabel, setNewSubLabel] = React.useState('');
+  const [creatingSub, setCreatingSub] = React.useState(false);
 
   const zone = useApiData<ZoneResponse>(`/api/zones/${encodeURIComponent(tld)}`, [tld]);
   const history = useApiData<Paginated<ZoneEventDto> & { tld: string }>(
@@ -96,9 +126,23 @@ export default function ZonePage() {
     [tld],
   );
 
+  const loadExtra = React.useCallback(() => {
+    getSession()
+      .then(setSessionState)
+      .catch(() => setSessionState(null));
+    getSiteSubdomains(tld)
+      .then((res) => setCustodySubs(res.custody))
+      .catch(() => setCustodySubs([]));
+  }, [tld]);
+
+  React.useEffect(() => {
+    loadExtra();
+  }, [loadExtra]);
+
   const reload = () => {
     zone.reload();
     history.reload();
+    loadExtra();
   };
 
   if (zone.loading) {
@@ -153,8 +197,29 @@ export default function ZonePage() {
     updatedAt: '',
   };
 
+  const activeAddress = wallet.address ?? sessionState?.session?.address ?? null;
+  const isAdmin = sessionState?.session?.role === 'admin';
   const isOwner =
-    Boolean(wallet.address) && wallet.address?.toLowerCase() === view.ownerAddress.toLowerCase();
+    Boolean(activeAddress) && activeAddress?.toLowerCase() === view.ownerAddress.toLowerCase();
+  const canManageHost = isOwner || isAdmin;
+  const hasSession = Boolean(sessionState?.session);
+
+  const handleCreateCustodySub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = newSubLabel.trim().toLowerCase();
+    if (!cleaned) return;
+    setCreatingSub(true);
+    try {
+      await createCustodySubdomain({ tld, label: cleaned, withStarterSite: true });
+      setNewSubLabel('');
+      toast.success(`Поддомен ${cleaned}${tld} создан со стартовым сайтом`);
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Не удалось создать поддомен');
+    } finally {
+      setCreatingSub(false);
+    }
+  };
 
   const regMs = new Date(view.registeredAt).getTime();
   const expMs = new Date(view.expiresAt).getTime();
@@ -278,11 +343,19 @@ export default function ZonePage() {
       {/* Вкладки */}
       <Tabs
         value={tab}
-        onValueChange={(next) => setTab(next as 'overview' | 'subdomains' | 'history')}
+        onValueChange={(next) =>
+          setTab(next as 'overview' | 'site' | 'dns' | 'subdomains' | 'history')
+        }
         className="mt-6"
       >
         <TabsList className="h-auto flex-wrap justify-start gap-1 bg-muted/60 p-1">
           <TabsTrigger value="overview">Обзор и данные</TabsTrigger>
+          <TabsTrigger value="site" className="gap-1.5">
+            <Globe className="h-3.5 w-3.5" /> Сайт и файлы
+          </TabsTrigger>
+          <TabsTrigger value="dns" className="gap-1.5">
+            <Network className="h-3.5 w-3.5" /> DNS
+          </TabsTrigger>
           <TabsTrigger value="subdomains" className="gap-1.5">
             <Layers className="h-3.5 w-3.5" /> Поддомены
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[11px]">
@@ -475,9 +548,84 @@ export default function ZonePage() {
           </Card>
         </TabsContent>
 
+        {/* 1.5. САЙТ И ФАЙЛЫ */}
+        <TabsContent value="site">
+          <SiteManager
+            tld={view.tld}
+            isOwner={canManageHost}
+            hasSession={hasSession}
+            onRequireAuth={() => setAuthDialogOpen(true)}
+          />
+        </TabsContent>
+
+        {/* 1.6. DNS */}
+        <TabsContent value="dns">
+          <DnsManager
+            tld={view.tld}
+            isOwner={canManageHost}
+            hasSession={hasSession}
+            onRequireAuth={() => setAuthDialogOpen(true)}
+          />
+        </TabsContent>
+
         {/* 2. ПОДДОМЕНЫ */}
-        <TabsContent value="subdomains">
-          <ZoneSubdomains zone={view as ZoneDto} onChanged={reload} />
+        <TabsContent value="subdomains" className="space-y-4">
+          {canManageHost && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Создать поддомен платформы (без газа и MetaMask)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <form onSubmit={handleCreateCustodySub} className="flex flex-wrap gap-2">
+                  <div className="flex flex-1 items-center gap-1 min-w-[220px]">
+                    <Input
+                      value={newSubLabel}
+                      onChange={(e) => setNewSubLabel(e.target.value)}
+                      placeholder="blog"
+                      className="mono"
+                    />
+                    <span className="mono text-sm text-muted-foreground">{view.tld}</span>
+                  </div>
+                  <Button type="submit" disabled={creatingSub || !newSubLabel.trim()} className="gap-1.5">
+                    <Plus className="h-4 w-4" />
+                    Создать поддомен и сайт
+                  </Button>
+                </form>
+
+                {custodySubs.length > 0 && (
+                  <div className="space-y-1.5 pt-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Поддомены платформы ({custodySubs.length}):
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {custodySubs.map((cs) => (
+                        <div
+                          key={cs.id}
+                          className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
+                        >
+                          <span className="mono font-semibold">
+                            {cs.subLabel}
+                            {cs.tld}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setTab('site')}
+                          >
+                            Открыть файлы сайта
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {chain ? <ZoneSubdomains zone={view as ZoneDto} onChanged={reload} /> : null}
         </TabsContent>
 
         {/* 3. ИСТОРИЯ И БЛОКЧЕЙН */}
@@ -573,6 +721,23 @@ export default function ZonePage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Авторизация для управления зоной {view.tld}</DialogTitle>
+            <DialogDescription>
+              Войдите через Email и пароль (или подтвердите подписью кошелёк в кабинете).
+            </DialogDescription>
+          </DialogHeader>
+          <EmailAuthCard
+            onSuccess={() => {
+              setAuthDialogOpen(false);
+              reload();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

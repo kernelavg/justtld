@@ -16,8 +16,11 @@ const RESERVED_PATHS = new Set([
   'dashboard',
   'docs',
   'explorer',
+  'login',
   'register',
   'resolve',
+  'sites',
+  'store',
   'subdomains',
   'tx',
   'zone',
@@ -96,20 +99,20 @@ function zoneFromPath(request: NextRequest): string | null {
 export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== 'production';
 
-  // Резолвер: myzone.вашдомен → страница зоны, blog.myzone.вашдомен → страница поддомена.
+  // Резолвер и хостинг: myzone.вашдомен → сайт/резолвер зоны, blog.myzone.вашдомен → сайт/резолвер поддомена.
   const target = resolverTarget(request);
   if (target) {
-    // На хосте самой зоны поддомен можно открыть первым сегментом пути:
-    // justtld-demo.вашдомен/blog → blog.justtld-demo. Это единственная форма
-    // второго уровня, которой не нужен отдельный сертификат.
-    const subFromPath = target.label ? null : zoneFromPath(request);
-    if (request.nextUrl.pathname === '/' || subFromPath) {
+    const pathname = request.nextUrl.pathname;
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      !pathname.startsWith('/api/') &&
+      !pathname.startsWith('/_next/')
+    ) {
       const url = request.nextUrl.clone();
-      url.pathname = '/resolve';
-      const label = target.label ?? subFromPath;
+      url.pathname = '/api/site-serve';
       const params = [`zone=${encodeURIComponent(target.zone)}`];
-      if (label) params.push(`label=${encodeURIComponent(label)}`);
-      if (subFromPath) params.push('via=path');
+      if (target.label) params.push(`label=${encodeURIComponent(target.label)}`);
+      params.push(`path=${encodeURIComponent(pathname)}`);
       url.search = `?${params.join('&')}`;
       return NextResponse.rewrite(url);
     }

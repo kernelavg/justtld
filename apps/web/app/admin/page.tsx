@@ -42,6 +42,7 @@ import {
   getSession,
   signInWithWallet,
 } from '@/lib/api';
+import { AdminStorePanel } from '@/components/admin/admin-store-panel';
 
 type AuditPage = Paginated<{
   id: string;
@@ -240,13 +241,18 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-6">
-        <Tabs defaultValue="zones">
+        <Tabs defaultValue="store">
           <TabsList>
+            <TabsTrigger value="store">Магазин и оплата</TabsTrigger>
             <TabsTrigger value="zones">{t('common.zones')}</TabsTrigger>
             <TabsTrigger value="lists">{t('admin.blacklist')}</TabsTrigger>
             <TabsTrigger value="system">{t('admin.indexer')}</TabsTrigger>
             <TabsTrigger value="audit">{t('admin.audit')}</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="store">
+            <AdminStorePanel />
+          </TabsContent>
 
           <TabsContent value="zones">
             <div className="grid gap-4 lg:grid-cols-2">

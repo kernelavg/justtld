@@ -87,3 +87,31 @@ export function rateLimits() {
     admin: Number(process.env.RATE_LIMIT_ADMIN ?? 20),
   };
 }
+
+export function resolverDomain(): string {
+  return (process.env.RESOLVER_DOMAIN ?? 'justtld.online').trim().toLowerCase();
+}
+
+export function cfApiToken(): string {
+  return (process.env.CF_API_TOKEN ?? '').trim();
+}
+
+export function cfZoneId(): string {
+  return (process.env.CF_ZONE_ID ?? '').trim();
+}
+
+export function yoomoneyWallet(): string {
+  return (process.env.YOOMONEY_WALLET ?? '').trim();
+}
+
+export function yoomoneySecret(): string {
+  return (process.env.YOOMONEY_SECRET ?? '').trim();
+}
+
+export function cryptoBotToken(): string {
+  return (process.env.CRYPTOBOT_API_TOKEN ?? '').trim();
+}
+
+export function paymentsSandbox(): boolean {
+  return process.env.PAYMENTS_SANDBOX === 'true' || (!yoomoneyWallet() && !cryptoBotToken());
+}

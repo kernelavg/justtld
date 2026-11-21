@@ -176,6 +176,120 @@ export const confirmTxSchema = z.object({
   transactionHash: txHashSchema,
 });
 
+/* ───────────── Магазин, аккаунты, хостинг сайтов, DNS ───────────── */
+
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email('EMAIL_INVALID')
+  .max(160, 'EMAIL_TOO_LONG');
+
+export const accountRegisterSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(6, 'PASSWORD_TOO_SHORT').max(128, 'PASSWORD_TOO_LONG'),
+  displayName: z.string().trim().max(64).optional(),
+});
+
+export const accountLoginSchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, 'PASSWORD_EMPTY').max(128),
+});
+
+export const storeListingCreateSchema = z.object({
+  tld: tldSchema,
+  subLabel: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(32)
+    .refine((v) => v === '' || /^[a-z0-9-]+$/.test(v), 'LABEL_INVALID')
+    .default(''),
+  title: z.string().trim().min(1, 'TITLE_EMPTY').max(120),
+  description: z.string().trim().max(500).default(''),
+  priceRub: z.coerce.number().min(1).max(1_000_000),
+  priceUsdt: z.coerce.number().min(0.1).max(100_000),
+  periodDays: z.coerce.number().int().min(30).max(3650).default(365),
+  status: z.enum(['available', 'sold', 'hidden']).default('available'),
+});
+
+export const storePricingSchema = z.object({
+  customZoneEnabled: z.boolean(),
+  customZonePriceRub: z.coerce.number().min(1).max(1_000_000),
+  customZonePriceUsdt: z.coerce.number().min(0.1).max(100_000),
+  customSubdomainEnabled: z.boolean(),
+  customSubdomainPriceRub: z.coerce.number().min(1).max(1_000_000),
+  customSubdomainPriceUsdt: z.coerce.number().min(0.1).max(100_000),
+});
+
+export const createOrderSchema = z.object({
+  kind: z.enum(['listing', 'custom_zone', 'custom_subdomain']),
+  listingId: z.string().uuid().optional(),
+  tld: tldSchema.optional(),
+  subLabel: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(32)
+    .optional()
+    .default(''),
+  provider: z.enum(['yoomoney', 'cryptobot', 'sandbox']),
+  currency: z.enum(['RUB', 'USDT', 'TON', 'BTC', 'ETH']).default('RUB'),
+  buyerEmail: emailSchema.optional(),
+});
+
+export const optionalSubLabelSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(32)
+  .refine(
+    (v) =>
+      v === '' ||
+      (/^[a-z0-9-]+$/.test(v) && !v.startsWith('-') && !v.endsWith('-') && !v.includes('--')),
+    'LABEL_INVALID',
+  )
+  .default('');
+
+export const siteFilePathSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/^\/+/, '').replace(/\/{2,}/g, '/'))
+  .refine((value) => value.length >= 1 && value.length <= 160, 'PATH_LENGTH')
+  .refine(
+    (value) =>
+      !value.includes('..') &&
+      !value.includes('\\') &&
+      /^[a-zA-Z0-9._-]+(\/[a-zA-Z0-9._-]+)*$/.test(value),
+    'PATH_INVALID',
+  );
+
+export const siteSettingsSchema = z.object({
+  tld: tldSchema,
+  subLabel: optionalSubLabelSchema,
+  mode: z.enum(['redirect', 'hosting', 'card']),
+  entryFile: siteFilePathSchema.default('index.html'),
+  spaFallback: z.boolean().default(false),
+});
+
+export const siteFilePutSchema = z.object({
+  tld: tldSchema,
+  subLabel: optionalSubLabelSchema,
+  path: siteFilePathSchema,
+  content: z.string().max(2_800_000, 'FILE_TOO_LARGE'),
+  isBase64: z.boolean().default(false),
+  mimeType: z.string().trim().max(120).optional(),
+});
+
+export const dnsRecordCreateSchema = z.object({
+  tld: tldSchema,
+  subLabel: optionalSubLabelSchema,
+  recordType: z.enum(['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS']),
+  content: z.string().trim().min(1, 'DNS_CONTENT_EMPTY').max(512),
+  ttl: z.coerce.number().int().min(60).max(86400).default(120),
+  priority: z.coerce.number().int().min(0).max(65535).nullable().optional(),
+});
+
 export type ZonesQuery = z.infer<typeof zonesQuerySchema>;
 export type SubdomainsQuery = z.infer<typeof subdomainsQuerySchema>;
 export type PrepareRegistrationInput = z.infer<typeof prepareRegistrationSchema>;

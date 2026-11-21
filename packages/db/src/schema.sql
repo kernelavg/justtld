@@ -214,3 +214,136 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   version    text PRIMARY KEY,
   applied_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- ══════════ V2: аккаунты, магазин, платежи, хостинг сайтов и DNS ══════════
+
+-- Встроенные аккаунты (Email + пароль) для покупателей без MetaMask.
+CREATE TABLE IF NOT EXISTS accounts (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email          text NOT NULL,
+  password_hash  text NOT NULL,
+  wallet_address text NOT NULL,
+  display_name   text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT accounts_wallet_fmt CHECK (wallet_address ~ '^0x[0-9a-f]{40}$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS accounts_email_key  ON accounts (email);
+CREATE UNIQUE INDEX IF NOT EXISTS accounts_wallet_key ON accounts (wallet_address);
+
+-- Настройки тарифов магазина (JSON по ключу 'pricing').
+CREATE TABLE IF NOT EXISTS store_settings (
+  key        text PRIMARY KEY,
+  value      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- Витрина зон и готовых поддоменов, выставленных администратором на продажу.
+CREATE TABLE IF NOT EXISTS store_listings (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tld           text NOT NULL,
+  sub_label     text NOT NULL DEFAULT '',
+  title         text NOT NULL,
+  description   text NOT NULL DEFAULT '',
+  price_rub     numeric(12, 2) NOT NULL,
+  price_usdt    numeric(12, 4) NOT NULL,
+  period_days   int NOT NULL DEFAULT 365,
+  status        text NOT NULL DEFAULT 'available',
+  buyer_address text,
+  sold_at       timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT store_listings_status_chk CHECK (status IN ('available', 'sold', 'hidden')),
+  CONSTRAINT store_listings_tld_fmt    CHECK (tld ~ '^\.[a-z0-9-]{2,19}$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS store_listings_asset_key ON store_listings (tld, sub_label);
+CREATE INDEX IF NOT EXISTS store_listings_status_idx ON store_listings (status, created_at DESC);
+
+-- Заказы на оплату через ЮMoney (RUB) и @CryptoBot (USDT / TON / BTC / ETH).
+CREATE TABLE IF NOT EXISTS payment_orders (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  buyer_address text NOT NULL,
+  buyer_email  text,
+  tld          text NOT NULL,
+  sub_label    text NOT NULL DEFAULT '',
+  kind         text NOT NULL,
+  listing_id   uuid REFERENCES store_listings (id) ON DELETE SET NULL,
+  provider     text NOT NULL,
+  currency     text NOT NULL,
+  amount       text NOT NULL,
+  status       text NOT NULL DEFAULT 'pending',
+  external_id  text,
+  pay_url      text,
+  tx_hash      text,
+  meta         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  paid_at      timestamptz,
+  fulfilled_at timestamptz,
+  CONSTRAINT payment_orders_kind_chk CHECK (kind IN ('listing', 'custom_zone', 'custom_subdomain', 'renewal')),
+  CONSTRAINT payment_orders_provider_chk CHECK (provider IN ('yoomoney', 'cryptobot', 'sandbox')),
+  CONSTRAINT payment_orders_status_chk CHECK (status IN ('pending', 'paid', 'fulfilled', 'expired', 'failed'))
+);
+CREATE INDEX IF NOT EXISTS payment_orders_buyer_idx ON payment_orders (buyer_address, created_at DESC);
+CREATE INDEX IF NOT EXISTS payment_orders_ext_idx   ON payment_orders (provider, external_id);
+CREATE INDEX IF NOT EXISTS payment_orders_status_idx ON payment_orders (status, created_at DESC);
+
+-- Платформенные права на купленные зоны и поддомены (работают даже без газа/кошелька).
+CREATE TABLE IF NOT EXISTS zone_custody (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tld           text NOT NULL,
+  sub_label     text NOT NULL DEFAULT '',
+  owner_address text NOT NULL,
+  source        text NOT NULL DEFAULT 'order',
+  order_id      uuid REFERENCES payment_orders (id) ON DELETE SET NULL,
+  expires_at    timestamptz NOT NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT zone_custody_owner_fmt CHECK (owner_address ~ '^0x[0-9a-f]{40}$'),
+  CONSTRAINT zone_custody_source_chk CHECK (source IN ('order', 'admin', 'onchain'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS zone_custody_asset_key ON zone_custody (tld, sub_label);
+CREATE INDEX IF NOT EXISTS zone_custody_owner_idx ON zone_custody (owner_address);
+
+-- Настройки хостинга/режима отображения зоны или поддомена.
+CREATE TABLE IF NOT EXISTS site_settings (
+  tld          text NOT NULL,
+  sub_label    text NOT NULL DEFAULT '',
+  mode         text NOT NULL DEFAULT 'card',
+  entry_file   text NOT NULL DEFAULT 'index.html',
+  spa_fallback boolean NOT NULL DEFAULT false,
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (tld, sub_label),
+  CONSTRAINT site_settings_mode_chk CHECK (mode IN ('redirect', 'hosting', 'card'))
+);
+
+-- Файлы статических сайтов пользователей (HTML/CSS/JS/картинки) в PostgreSQL.
+CREATE TABLE IF NOT EXISTS site_files (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tld        text NOT NULL,
+  sub_label  text NOT NULL DEFAULT '',
+  path       text NOT NULL,
+  content    bytea NOT NULL,
+  mime_type  text NOT NULL,
+  size_bytes int NOT NULL,
+  updated_by text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS site_files_asset_path_key ON site_files (tld, sub_label, path);
+CREATE INDEX IF NOT EXISTS site_files_asset_idx ON site_files (tld, sub_label);
+
+-- DNS-записи (A, AAAA, CNAME, MX, TXT, NS), синхронизируемые с Cloudflare.
+CREATE TABLE IF NOT EXISTS dns_records (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tld          text NOT NULL,
+  sub_label    text NOT NULL DEFAULT '',
+  record_type  text NOT NULL,
+  fqdn         text NOT NULL,
+  content      text NOT NULL,
+  ttl          int NOT NULL DEFAULT 120,
+  priority     int,
+  cf_record_id text,
+  owner_address text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT dns_records_type_chk CHECK (record_type IN ('A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS'))
+);
+CREATE INDEX IF NOT EXISTS dns_records_asset_idx ON dns_records (tld, sub_label, created_at DESC);

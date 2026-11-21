@@ -12,6 +12,7 @@ export const dictionary = {
     en: 'Create your zone. Own your space.',
   },
   'nav.home': { ru: 'Главная', en: 'Home' },
+  'nav.store': { ru: 'Магазин', en: 'Store' },
   'nav.zones': { ru: 'Зоны', en: 'Zones' },
   'nav.subdomains': { ru: 'Поддомены', en: 'Subdomains' },
   'nav.register': { ru: 'Регистрация', en: 'Register' },

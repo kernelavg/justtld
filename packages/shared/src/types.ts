@@ -143,3 +143,116 @@ export type SubdomainEventDto = {
   details: Record<string, unknown>;
   createdAt: string;
 };
+
+/* ───────────── Магазин, платежи, хостинг сайтов и DNS ───────────── */
+
+export type AccountDto = {
+  id: string;
+  email: string;
+  walletAddress: string;
+  displayName: string | null;
+  createdAt: string;
+};
+
+export type StoreListingStatus = 'available' | 'sold' | 'hidden';
+
+export type StoreListingDto = {
+  id: string;
+  tld: string;
+  subLabel: string;
+  title: string;
+  description: string;
+  priceRub: number;
+  priceUsdt: number;
+  periodDays: number;
+  status: StoreListingStatus;
+  buyerAddress: string | null;
+  soldAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StorePricingDto = {
+  customZoneEnabled: boolean;
+  customZonePriceRub: number;
+  customZonePriceUsdt: number;
+  customSubdomainEnabled: boolean;
+  customSubdomainPriceRub: number;
+  customSubdomainPriceUsdt: number;
+};
+
+export type PaymentProvider = 'yoomoney' | 'cryptobot' | 'sandbox';
+export type PaymentStatus = 'pending' | 'paid' | 'fulfilled' | 'expired' | 'failed';
+export type OrderKind = 'listing' | 'custom_zone' | 'custom_subdomain' | 'renewal';
+
+export type PaymentOrderDto = {
+  id: string;
+  buyerAddress: string;
+  buyerEmail: string | null;
+  tld: string;
+  subLabel: string;
+  kind: OrderKind;
+  listingId: string | null;
+  provider: PaymentProvider;
+  currency: string;
+  amount: string;
+  status: PaymentStatus;
+  externalId: string | null;
+  payUrl: string | null;
+  txHash: string | null;
+  meta: Record<string, unknown>;
+  createdAt: string;
+  paidAt: string | null;
+  fulfilledAt: string | null;
+};
+
+export type ZoneCustodyDto = {
+  id: string;
+  tld: string;
+  subLabel: string;
+  ownerAddress: string;
+  source: 'order' | 'admin' | 'onchain';
+  orderId: string | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SiteMode = 'redirect' | 'hosting' | 'card';
+
+export type SiteSettingsDto = {
+  tld: string;
+  subLabel: string;
+  mode: SiteMode;
+  entryFile: string;
+  spaFallback: boolean;
+  updatedAt: string;
+};
+
+export type SiteFileDto = {
+  id: string;
+  tld: string;
+  subLabel: string;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+  updatedBy: string;
+  updatedAt: string;
+};
+
+export type DnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'MX' | 'TXT' | 'NS';
+
+export type DnsRecordDto = {
+  id: string;
+  tld: string;
+  subLabel: string;
+  recordType: DnsRecordType;
+  fqdn: string;
+  content: string;
+  ttl: number;
+  priority: number | null;
+  cfRecordId: string | null;
+  ownerAddress: string;
+  createdAt: string;
+  updatedAt: string;
+};

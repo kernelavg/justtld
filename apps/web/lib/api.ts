@@ -1,11 +1,21 @@
 'use client';
 
 import type {
+  AccountDto,
+  DnsRecordDto,
+  DnsRecordType,
   Paginated,
+  PaymentOrderDto,
+  PaymentProvider,
+  SiteFileDto,
+  SiteSettingsDto,
   StatsDto,
+  StoreListingDto,
+  StorePricingDto,
   SubdomainDto,
   TransferRequestDto,
   UnsignedTx,
+  ZoneCustodyDto,
   ZoneDto,
   ZoneEventDto,
 } from '@justtld/shared';
@@ -150,10 +160,29 @@ export const getHealth = () => apiFetch<HealthResponse>('/api/health');
 
 export type SessionResponse = {
   session: { address: string; role: 'admin' | 'user' } | null;
+  account?: AccountDto | null;
   adminAddress: string | null;
 };
 
 export const getSession = () => apiFetch<SessionResponse>('/api/auth/session');
+
+export const registerWithEmail = (payload: {
+  email: string;
+  password: string;
+  displayName?: string;
+}) =>
+  postJson<{
+    ok: boolean;
+    session: NonNullable<SessionResponse['session']>;
+    account: AccountDto;
+  }>('/api/auth/register', payload);
+
+export const loginWithEmail = (payload: { email: string; password: string }) =>
+  postJson<{
+    ok: boolean;
+    session: NonNullable<SessionResponse['session']>;
+    account: AccountDto;
+  }>('/api/auth/login', payload);
 
 export async function signInWithWallet(
   address: string,
@@ -308,3 +337,211 @@ export type DevWalletAccount = { label: string; address: string; privateKey: str
 
 export const getDevWallets = () =>
   apiFetch<{ enabled: boolean; warning: string; accounts: DevWalletAccount[] }>('/api/dev/wallets');
+
+/* ─────────────────────── V2: магазин, хостинг, DNS ─────────────────────── */
+
+export type GatewayStatusDto = {
+  yoomoneyConfigured: boolean;
+  cryptobotConfigured: boolean;
+  cloudflareConfigured: boolean;
+  sandboxEnabled: boolean;
+};
+
+export type StoreCatalogResponse = {
+  listings: StoreListingDto[];
+  pricing: StorePricingDto;
+  gateways: GatewayStatusDto;
+  resolverDomain: string;
+  myOrders: PaymentOrderDto[];
+  myCustody: ZoneCustodyDto[];
+};
+
+export const getStoreCatalog = () => apiFetch<StoreCatalogResponse>('/api/store');
+
+export const createStoreOrder = (payload: {
+  kind: 'listing' | 'custom_zone' | 'custom_subdomain';
+  provider: PaymentProvider;
+  currency?: 'RUB' | 'USDT' | 'TON' | 'BTC' | 'ETH';
+  listingId?: string;
+  tld?: string;
+  subLabel?: string;
+}) =>
+  postJson<{
+    order: PaymentOrderDto;
+    payUrl: string | null;
+    instructions: string;
+  }>('/api/store/orders', payload);
+
+export const getStoreOrder = (id: string) =>
+  apiFetch<{ order: PaymentOrderDto }>(`/api/store/orders/${encodeURIComponent(id)}`);
+
+export const confirmStoreOrder = (id: string) =>
+  postJson<{ ok: boolean; order: PaymentOrderDto; custody: ZoneCustodyDto | null }>(
+    `/api/store/orders/${encodeURIComponent(id)}`,
+    {},
+  );
+
+export const adminGetStore = () =>
+  apiFetch<{
+    listings: StoreListingDto[];
+    pricing: StorePricingDto;
+    orders: PaymentOrderDto[];
+    custody: ZoneCustodyDto[];
+    gateways: GatewayStatusDto;
+  }>('/api/admin/store');
+
+export const adminUpsertListing = (listing: {
+  id?: string;
+  tld: string;
+  subLabel?: string;
+  title: string;
+  description?: string;
+  priceRub: number;
+  priceUsdt: number;
+  periodDays?: number;
+  status?: 'available' | 'sold' | 'hidden';
+}) =>
+  postJson<{ ok: boolean; listing: StoreListingDto }>('/api/admin/store', {
+    action: 'upsert_listing',
+    listing,
+  });
+
+export const adminUpdatePricing = (pricing: StorePricingDto) =>
+  postJson<{ ok: boolean; pricing: StorePricingDto }>('/api/admin/store', {
+    action: 'update_pricing',
+    pricing,
+  });
+
+export const adminGrantZone = (payload: {
+  tld: string;
+  subLabel?: string;
+  owner: string;
+  periodDays?: number;
+}) =>
+  postJson<{ ok: boolean; custody: ZoneCustodyDto }>('/api/admin/store', {
+    action: 'grant_zone',
+    ...payload,
+  });
+
+export const adminConfirmOrder = (orderId: string) =>
+  postJson<{ ok: boolean; order: PaymentOrderDto; custody: ZoneCustodyDto | null }>(
+    '/api/admin/store',
+    {
+      action: 'confirm_order',
+      orderId,
+    },
+  );
+
+export const adminDeleteListing = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/api/admin/store?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+export const getSiteFiles = (tld: string, sub = '') =>
+  apiFetch<{
+    tld: string;
+    subLabel: string;
+    ownership: {
+      isOwner: boolean;
+      isAdmin: boolean;
+      ownerAddress: string | null;
+      via: 'admin' | 'chain' | 'custody' | 'none';
+    };
+    settings: SiteSettingsDto;
+    files: SiteFileDto[];
+    totalBytes: number;
+    maxSiteBytes: number;
+    maxFileBytes: number;
+  }>(`/api/sites/files?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}`);
+
+export const getSiteFileContent = (tld: string, path: string, sub = '') =>
+  apiFetch<{
+    path: string;
+    mimeType: string;
+    sizeBytes: number;
+    updatedAt: string;
+    isText: boolean;
+    content: string | null;
+    contentBase64: string | null;
+  }>(
+    `/api/sites/files/content?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}&path=${encodeURIComponent(path)}`,
+  );
+
+export const saveSiteFile = (
+  tld: string,
+  payload: { path: string; content?: string; contentBase64?: string; mimeType?: string },
+  sub = '',
+) =>
+  apiFetch<{ ok: boolean; file: SiteFileDto }>(
+    `/api/sites/files?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}`,
+    { method: 'PUT', body: JSON.stringify(payload) },
+  );
+
+export const updateSiteSettings = (
+  tld: string,
+  payload: {
+    mode: 'card' | 'hosting' | 'redirect';
+    entryFile?: string;
+    spaFallback?: boolean;
+    seedStarter?: boolean;
+  },
+  sub = '',
+) =>
+  apiFetch<{ ok: boolean; settings: SiteSettingsDto; files: SiteFileDto[] }>(
+    `/api/sites/files?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+
+export const deleteSiteFile = (tld: string, path: string, sub = '') =>
+  apiFetch<{ ok: boolean; path: string }>(
+    `/api/sites/files?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}&path=${encodeURIComponent(path)}`,
+    { method: 'DELETE' },
+  );
+
+export const getSiteSubdomains = (tld: string) =>
+  apiFetch<{
+    tld: string;
+    onchain: SubdomainDto[];
+    custody: ZoneCustodyDto[];
+  }>(`/api/sites/subdomains?tld=${encodeURIComponent(tld)}`);
+
+export const createCustodySubdomain = (payload: {
+  tld: string;
+  label: string;
+  withStarterSite?: boolean;
+}) => postJson<{ ok: boolean; custody: ZoneCustodyDto }>('/api/sites/subdomains', payload);
+
+export const getDnsRecords = (tld: string, sub = '') =>
+  apiFetch<{
+    tld: string;
+    subLabel: string;
+    fqdn: string;
+    resolverDomain: string;
+    serverIp: string;
+    cloudflareConfigured: boolean;
+    cloudflareError: string | null;
+    cloudflareRecords: Array<{
+      id: string;
+      type: string;
+      name: string;
+      content: string;
+      ttl: number;
+      proxied?: boolean;
+    }>;
+    records: DnsRecordDto[];
+  }>(`/api/dns?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}`);
+
+export const createDnsRecord = (payload: {
+  tld: string;
+  subLabel?: string;
+  recordType: DnsRecordType;
+  content: string;
+  ttl?: number;
+  priority?: number | null;
+}) => postJson<{ ok: boolean; record: DnsRecordDto; synced: boolean }>('/api/dns', payload);
+
+export const deleteDnsRecordApi = (tld: string, id: string, sub = '') =>
+  apiFetch<{ ok: boolean; id: string }>(
+    `/api/dns?tld=${encodeURIComponent(tld)}&sub=${encodeURIComponent(sub)}&id=${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );

@@ -1,11 +1,12 @@
-import { normalizeTld, validateTldFormat } from '@justtld/shared';
+import { ApiError, normalizeTld, validateTldFormat, type ZoneDto } from '@justtld/shared';
 import {
   countSubdomainsByZone,
+  getCustody,
   getZoneByTld,
+  listCustodySubdomainsByTld,
   listTransfersForZone,
   refreshExpiredStatuses,
 } from '@justtld/db';
-import { ApiError } from '@justtld/shared';
 import { jsonResponse, route } from '@/lib/server/http';
 import { readChainZone } from '@/lib/server/chain';
 import {
@@ -28,25 +29,50 @@ export const GET = route(
     }
 
     await refreshExpiredStatuses().catch(() => 0);
-    const [zone, chain, subdomainsCount] = await Promise.all([
+    const [rawZone, chain, subdomainsCount, custody, custodySubdomains] = await Promise.all([
       getZoneByTld(tld),
       readChainZone(tld),
       subdomainsEnabled() ? countSubdomainsByZone(tld).catch(() => 0) : Promise.resolve(0),
+      getCustody(tld, '').catch(() => null),
+      listCustodySubdomainsByTld(tld).catch(() => []),
     ]);
 
-    if (!zone && !chain) {
+    if (!rawZone && !chain && !custody) {
       throw ApiError.notFound('Зона не найдена ни в кэше, ни в блокчейне');
     }
 
-    const consistent =
-      !zone || !chain
-        ? false
-        : zone.ownerAddress === chain.owner &&
-          Math.abs(new Date(zone.expiresAt).getTime() / 1000 - chain.expiresAt) < 2 &&
-          zone.metadata === chain.metadata &&
-          (zone.status === 'blocked') === chain.blocked;
+    const nowMs = Date.now();
+    const zone: ZoneDto | null =
+      rawZone ??
+      (custody
+        ? {
+            id: `custody-${custody.tld}`,
+            tld: custody.tld,
+            ownerAddress: custody.ownerAddress,
+            status: new Date(custody.expiresAt).getTime() > nowMs ? 'active' : 'expired',
+            registeredAt: custody.createdAt,
+            expiresAt: custody.expiresAt,
+            metadata: JSON.stringify({
+              description: 'Зона платформы JustTLD',
+            }),
+            transactionHash: 'platform-custody',
+            blockNumber: 0,
+            createdAt: custody.createdAt,
+            updatedAt: custody.updatedAt,
+          }
+        : null);
 
-    const transfers = zone ? await listTransfersForZone(zone.id, 5).catch(() => []) : [];
+    const consistent =
+      !rawZone && !chain && custody
+        ? true
+        : !rawZone || !chain
+          ? false
+          : rawZone.ownerAddress === chain.owner &&
+            Math.abs(new Date(rawZone.expiresAt).getTime() / 1000 - chain.expiresAt) < 2 &&
+            rawZone.metadata === chain.metadata &&
+            (rawZone.status === 'blocked') === chain.blocked;
+
+    const transfers = rawZone ? await listTransfersForZone(rawZone.id, 5).catch(() => []) : [];
     const expiresSource = chain
       ? new Date(chain.expiresAt * 1000).toISOString()
       : zone?.expiresAt ?? null;
@@ -57,8 +83,10 @@ export const GET = route(
     return jsonResponse({
       zone,
       chain,
+      custody,
       consistent,
-      subdomainsCount,
+      subdomainsCount: subdomainsCount + custodySubdomains.length,
+      custodySubdomainsCount: custodySubdomains.length,
       subdomainsEnabled: subdomainsEnabled(),
       subdomainsContract: subdomainsEnabled() ? subdomainsAddress() : null,
       gracePeriodDays: GRACE_PERIOD_DAYS,
