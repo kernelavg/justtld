@@ -73,6 +73,7 @@ export function assertSameOrigin(request: Request): void {
 
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (!origin) {
     // Клиенты без Origin (curl, сервер-сервер) допускаются, но требуют явный JSON-контент.
     const contentType = request.headers.get('content-type') ?? '';
@@ -80,11 +81,21 @@ export function assertSameOrigin(request: Request): void {
     throw ApiError.forbidden('CSRF: отсутствует Origin и неверный Content-Type');
   }
   try {
-    const originHost = new URL(origin).host;
-    if (host && originHost !== host) {
+    const originHost = new URL(origin).host.toLowerCase();
+    const allowedHosts = new Set<string>();
+    if (host) allowedHosts.add(host.toLowerCase());
+    if (forwardedHost) {
+      const base = (process.env.RESOLVER_DOMAIN ?? 'justtld.online').trim().toLowerCase();
+      const fh = forwardedHost.toLowerCase();
+      if (fh === base || fh.endsWith(`.${base}`) || fh === 'justtld.duckdns.org') {
+        allowedHosts.add(fh);
+      }
+    }
+    if (allowedHosts.size > 0 && !allowedHosts.has(originHost)) {
       throw ApiError.forbidden('CSRF: запрос с чужого origin отклонён');
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw ApiError.forbidden('CSRF: некорректный Origin');
   }
 }

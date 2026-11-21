@@ -6,6 +6,7 @@ import {
   placeAuctionBidSchema,
   siteFilePathSchema,
 } from '@justtld/shared';
+import { assertSameOrigin } from '../lib/server/http';
 import { hashPassword, verifyPassword } from '@/lib/server/accounts';
 import { buildSafeFqdn } from '@/lib/server/cloudflare-dns';
 import {
@@ -112,5 +113,37 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
     expect(() => createAuctionSchema.parse({ tld: '.bad_zone' })).toThrow();
     expect(placeAuctionBidSchema.parse({ amountRub: 300 }).amountRub).toBe(300);
     expect(() => placeAuctionBidSchema.parse({ amountRub: 10 })).toThrow();
+  });
+
+  it('assertSameOrigin разрешает доверенный x-forwarded-host для прокси VPS', () => {
+    const reqOk = new Request('https://justtld.onrender.com/api/auctions', {
+      method: 'POST',
+      headers: {
+        host: 'justtld.onrender.com',
+        'x-forwarded-host': 'justtld.online',
+        origin: 'https://justtld.online',
+      },
+    });
+    expect(() => assertSameOrigin(reqOk)).not.toThrow();
+
+    const reqMirror = new Request('https://justtld.onrender.com/api/auctions', {
+      method: 'POST',
+      headers: {
+        host: 'justtld.onrender.com',
+        'x-forwarded-host': 'justtld.duckdns.org',
+        origin: 'https://justtld.duckdns.org',
+      },
+    });
+    expect(() => assertSameOrigin(reqMirror)).not.toThrow();
+
+    const reqEvil = new Request('https://justtld.onrender.com/api/auctions', {
+      method: 'POST',
+      headers: {
+        host: 'justtld.onrender.com',
+        'x-forwarded-host': 'evil.com',
+        origin: 'https://evil.com',
+      },
+    });
+    expect(() => assertSameOrigin(reqEvil)).toThrow();
   });
 });
