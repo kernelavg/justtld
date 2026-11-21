@@ -27,6 +27,25 @@ const RESERVED_PATHS = new Set([
 ]);
 
 /**
+ * Хост, который запросил браузер.
+ *
+ * Запросы на `blog.zone.<домен>` не могут идти напрямую в Render: сертификат покрывает
+ * только один уровень, поэтому такие имена приходят через Cloudflare-прокси, а он
+ * подменяет Host на адрес сервиса (`justtld.onrender.com`) и передаёт исходное имя
+ * в `X-Forwarded-Host`. Заголовку верим только если он про наш домен резолвера —
+ * иначе его можно подделать с любого клиента.
+ */
+function requestHost(request: NextRequest): string {
+  const direct = (request.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? '';
+  const forwarded =
+    (request.headers.get('x-forwarded-host') ?? '').toLowerCase().split(':')[0] ?? '';
+  const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
+  if (!base || !forwarded) return direct;
+  if (!forwarded.endsWith(`.${base}`)) return direct;
+  return forwarded;
+}
+
+/**
  * Разбирает имя на поддомене резолвера. Два уровня:
  *   myzone.example.com        → зона .myzone
  *   blog.myzone.example.com   → поддомен blog в зоне .myzone
@@ -34,7 +53,7 @@ const RESERVED_PATHS = new Set([
 function resolverTarget(request: NextRequest): { zone: string; label: string | null } | null {
   const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
   if (!base) return null;
-  const host = (request.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? '';
+  const host = requestHost(request);
   if (!host.endsWith(`.${base}`)) return null;
   const prefix = host.slice(0, -(base.length + 1));
   if (!prefix) return null;

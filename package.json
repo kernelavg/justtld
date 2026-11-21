@@ -19,6 +19,8 @@
     "deploy:mainnet": "npm run deploy:mainnet -w @justtld/contracts",
     "deploy:subdomains:sepolia": "npm run deploy:subdomains:sepolia -w @justtld/contracts",
     "deploy:subdomains:mainnet": "npm run deploy:subdomains:mainnet -w @justtld/contracts",
+    "hosts:zone": "node scripts/setup-zone-hosts.mjs",
+    "hosts:zone:all": "node scripts/setup-zone-hosts.mjs --all",
     "verify:sepolia": "node scripts/verify-explorer.mjs sepolia",
     "verify:mainnet": "node scripts/verify-explorer.mjs mainnet",
     "db:setup": "bash scripts/setup-db.sh",

@@ -104,6 +104,32 @@
 - `blog.myzone.justtld.online` → то же самое, если для такого имени есть сертификат;
 - без своего домена то же самое по путям: `/myzone` и `/myzone/blog`.
 
+### Настоящие двухуровневые имена (включение)
+
+Схема, которая даёт «честный» `blog.femboy.justtld.online` бесплатно: каждую зону
+JustTLD делегируем в отдельную зону Cloudflare (`justtld-demo.justtld.online`).
+У дочерней зоны свой универсальный сертификат, и он покрывает `*.justtld-demo.justtld.online`
+— ровно наш второй уровень. Запросы идут через прокси Cloudflare, поэтому:
+
+- apex дочерней зоны (`justtld-demo.justtld.online`) отдаётся напрямую в Render — его сертификат
+  `*.justtld.online` покрывает один уровень;
+- `*` в дочерней зоне проксируется через Cloudflare (его сертификат покрывает второй уровень);
+- правило `X-Forwarded-Host = http.host` сохраняет исходное имя, правило `Host = justtld.onrender.com`
+  пропускает запрос в Render; приложение читает `X-Forwarded-Host` (см. `requestHost` в middleware).
+
+Всё делает `scripts/setup-zone-hosts.mjs`:
+
+```bash
+node scripts/setup-zone-hosts.mjs justtld-demo --dry-run
+node scripts/setup-zone-hosts.mjs justtld-demo
+node scripts/setup-zone-hosts.mjs --all        # все зоны из /api/zones
+```
+
+Скрипту нужен токен Cloudflare с правами **Zone:Read + Zone:Edit (все зоны), Zone:Create,
+Zone Settings/Rulesets:Edit, DNS:Edit**. Токен «только DNS одной зоны» не подойдёт: без
+`Zone:Create` нельзя создать дочернюю зону, без Rulesets — включить подмену Host.
+Сертификат дочерней зоны Cloudflare выпускает обычно за 5–15 минут после делегирования NS.
+
 ### Почему поддомен в хосте пишется через `--`
 
 Сертификат Render (и вообще любой публичный CA) покрывает только один уровень: `*.justtld.online`.
