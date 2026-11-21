@@ -94,6 +94,7 @@ export async function GET(request: Request): Promise<Response> {
   const rawZone = (url.searchParams.get('zone') ?? '').trim().toLowerCase();
   const rawLabel = (url.searchParams.get('label') ?? '').trim().toLowerCase();
   const rawPath = url.searchParams.get('path') ?? '/';
+  const isRootMode = url.searchParams.get('root') === '1';
 
   const parsedTld = tldSchema.safeParse(rawZone.startsWith('.') ? rawZone : `.${rawZone}`);
   if (!parsedTld.success) {
@@ -161,7 +162,13 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const domain = resolverDomain();
-  const fqdn = subLabel ? `${subLabel}.${tldClean}.${domain}` : `${tldClean}.${domain}`;
+  const fqdn = isRootMode
+    ? subLabel
+      ? `${subLabel}.${tldClean}`
+      : tldClean
+    : subLabel
+      ? `${subLabel}.${tldClean}.${domain}`
+      : `${tldClean}.${domain}`;
   const ownerAddress =
     (subLabel ? subdomain?.ownerAddress : zone?.ownerAddress) ?? custody?.ownerAddress ?? null;
 

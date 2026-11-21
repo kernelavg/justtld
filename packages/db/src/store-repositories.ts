@@ -839,3 +839,108 @@ export async function deleteDnsRecordById(id: string): Promise<boolean> {
   );
   return rows.length > 0;
 }
+
+export type RootDnsZoneEntry = {
+  tld: string;
+  zone: string;
+  ownerAddress: string;
+  mode: string;
+};
+
+export type RootDnsSubdomainEntry = {
+  tld: string;
+  zone: string;
+  label: string;
+  fqdn: string;
+  ownerAddress: string;
+};
+
+export type RootDnsSnapshot = {
+  generatedAt: string;
+  zones: RootDnsZoneEntry[];
+  subdomains: RootDnsSubdomainEntry[];
+  records: DnsRecordDto[];
+};
+
+/** Снимок всех независимых корневых зон (1-го и 2-го уровня) и их DNS-записей для JustTLD Root DNS. */
+export async function getRootDnsSnapshot(): Promise<RootDnsSnapshot> {
+  const [zoneRows, custodyZoneRows, subRows, custodySubRows, settingsRows, dnsRows] =
+    await Promise.all([
+      queryRows<{ tld: string; owner_address: string }>(
+        `SELECT tld, owner_address FROM zones WHERE status = 'active'`,
+      ),
+      queryRows<{ tld: string; owner_address: string }>(
+        `SELECT tld, owner_address FROM zone_custody WHERE sub_label = '' AND expires_at > now()`,
+      ),
+      queryRows<{ tld: string; label: string; owner_address: string }>(
+        `SELECT tld, label, owner_address FROM subdomains WHERE status = 'active'`,
+      ),
+      queryRows<{ tld: string; sub_label: string; owner_address: string }>(
+        `SELECT tld, sub_label, owner_address FROM zone_custody WHERE sub_label <> '' AND expires_at > now()`,
+      ),
+      queryRows<{ tld: string; sub_label: string; mode: string }>(
+        `SELECT tld, sub_label, mode FROM site_settings`,
+      ),
+      queryRows<DnsRow>(
+        `SELECT * FROM dns_records ORDER BY tld ASC, sub_label ASC, record_type ASC, created_at DESC`,
+      ),
+    ]);
+
+  const modeMap = new Map<string, string>();
+  for (const s of settingsRows) {
+    modeMap.set(`${s.tld.toLowerCase()}|${s.sub_label.toLowerCase()}`, s.mode);
+  }
+
+  const zoneMap = new Map<string, RootDnsZoneEntry>();
+  for (const row of [...zoneRows, ...custodyZoneRows]) {
+    const tld = row.tld.toLowerCase();
+    const zone = tld.replace(/^\.+/, '');
+    if (!zone || zoneMap.has(zone)) continue;
+    zoneMap.set(zone, {
+      tld,
+      zone,
+      ownerAddress: row.owner_address.toLowerCase(),
+      mode: modeMap.get(`${tld}|`) ?? 'card',
+    });
+  }
+
+  const subMap = new Map<string, RootDnsSubdomainEntry>();
+  for (const row of subRows) {
+    const tld = row.tld.toLowerCase();
+    const zone = tld.replace(/^\.+/, '');
+    const label = row.label.toLowerCase();
+    const fqdn = `${label}.${zone}`;
+    if (!subMap.has(fqdn)) {
+      subMap.set(fqdn, {
+        tld,
+        zone,
+        label,
+        fqdn,
+        ownerAddress: row.owner_address.toLowerCase(),
+      });
+    }
+  }
+  for (const row of custodySubRows) {
+    const tld = row.tld.toLowerCase();
+    const zone = tld.replace(/^\.+/, '');
+    const label = row.sub_label.toLowerCase();
+    const fqdn = `${label}.${zone}`;
+    if (!subMap.has(fqdn)) {
+      subMap.set(fqdn, {
+        tld,
+        zone,
+        label,
+        fqdn,
+        ownerAddress: row.owner_address.toLowerCase(),
+      });
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    zones: Array.from(zoneMap.values()).sort((a, b) => a.zone.localeCompare(b.zone)),
+    subdomains: Array.from(subMap.values()).sort((a, b) => a.fqdn.localeCompare(b.fqdn)),
+    records: dnsRows.map(toDnsDto),
+  };
+}
+

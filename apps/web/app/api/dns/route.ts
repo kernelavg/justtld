@@ -11,6 +11,7 @@ import {
   tldSchema,
 } from '@justtld/shared';
 import {
+  buildRootFqdn,
   buildSafeFqdn,
   cloudflareDnsEnabled,
   createCloudflareDnsRecord,
@@ -37,6 +38,7 @@ export const GET = route(
     const records = await listDnsRecords(tld, subLabel);
     const cfConfigured = cloudflareDnsEnabled();
     const fqdn = buildSafeFqdn(tld, subLabel);
+    const rootFqdn = buildRootFqdn(tld, subLabel);
 
     let cloudflareRecords: Awaited<ReturnType<typeof listCloudflareDnsRecords>> = [];
     let cloudflareError: string | null = null;
@@ -52,6 +54,8 @@ export const GET = route(
       tld,
       subLabel,
       fqdn,
+      rootFqdn,
+      dohUrl: 'https://root.justtld.online/dns-query',
       resolverDomain: resolverDomain(),
       serverIp: '95.182.89.37',
       cloudflareConfigured: cfConfigured,
@@ -68,15 +72,20 @@ export const POST = route(
     const body = await readJson(request, dnsRecordCreateSchema);
     const { session } = await requireAssetOwner(request, body.tld, body.subLabel);
 
-    const fqdn = buildSafeFqdn(body.tld, body.subLabel);
+    const isRoot = body.scope !== 'gateway';
+    const fqdn = isRoot
+      ? buildRootFqdn(body.tld, body.subLabel)
+      : buildSafeFqdn(body.tld, body.subLabel);
 
-    const cf = await createCloudflareDnsRecord({
-      type: body.recordType,
-      fqdn,
-      content: body.content,
-      ttl: body.ttl,
-      priority: body.priority,
-    });
+    const cf = isRoot
+      ? { id: null, synced: true }
+      : await createCloudflareDnsRecord({
+          type: body.recordType,
+          fqdn,
+          content: body.content,
+          ttl: body.ttl,
+          priority: body.priority,
+        });
 
     const record = await insertDnsRecord({
       tld: body.tld,
@@ -90,7 +99,7 @@ export const POST = route(
       ownerAddress: session.address,
     });
 
-    return jsonResponse({ ok: true, record, synced: cf.synced }, { status: 201 });
+    return jsonResponse({ ok: true, record, synced: cf.synced, scope: isRoot ? 'root' : 'gateway' }, { status: 201 });
   },
   { limit: 'write', bucket: 'dns-create' },
 );

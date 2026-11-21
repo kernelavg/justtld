@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>JustTLD Root DNS</title>
+  <style>
+    body {
+      margin: 0;
+      width: 340px;
+      background: #090b10;
+      color: #f4f4f5;
+      font: 13px/1.45 Inter, system-ui, sans-serif;
+      padding: 14px;
+    }
+    .hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .brand { font-weight: 700; font-size: 15px; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(34,197,94,0.16); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+    .row { display: flex; gap: 6px; margin-bottom: 10px; }
+    input {
+      flex: 1; background: #121620; color: #fff; border: 1px solid #262b38;
+      border-radius: 8px; padding: 8px 10px; outline: none; font-size: 12px;
+    }
+    button {
+      background: #4f46e5; color: #fff; border: 0; border-radius: 8px;
+      padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 12px;
+    }
+    button.sec { background: #1e2433; color: #d4d4d8; }
+    .hint { color: #9ca3af; font-size: 11px; margin-bottom: 10px; }
+    .list { max-height: 220px; overflow-y: auto; display: grid; gap: 6px; }
+    .item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 10px; border-radius: 8px; background: #121620; border: 1px solid #202636;
+    }
+    .zone { font-family: ui-monospace, monospace; font-weight: 600; color: #e4e4e7; }
+    .open { color: #818cf8; text-decoration: none; font-size: 12px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <span class="brand">JustTLD Root DNS</span>
+    <span class="badge" id="count">Загрузка...</span>
+  </div>
+  <form class="row" id="goForm">
+    <input id="addr" placeholder="expline или shop.expline" />
+    <button type="submit">Открыть</button>
+  </form>
+  <div class="hint">
+    Введите домен 1-го или 2-го уровня без ICANN (или введите в адресной строке <b>tld &lt;имя&gt;</b>).
+  </div>
+  <div class="list" id="zonesList"></div>
+  <div class="row" style="margin-top: 10px; margin-bottom: 0;">
+    <button class="sec" id="syncBtn" style="flex:1">Обновить зоны</button>
+    <button class="sec" id="portalBtn" style="flex:1">Сайт JustTLD</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

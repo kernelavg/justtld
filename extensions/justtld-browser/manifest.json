@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "JustTLD Root DNS (No-ICANN)",
+  "version": "1.0.0",
+  "description": "Открывайте независимые домены 1-го и 2-го уровня JustTLD (без ICANN, как Handshake) прямо в браузере.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://justtld.online/*",
+    "https://root.justtld.online/*"
+  ],
+  "omnibox": {
+    "keyword": "tld"
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JustTLD Root DNS"
+  }
+}

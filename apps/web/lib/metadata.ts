@@ -83,9 +83,13 @@ export function buildResolverLinks(options: {
   if (sub) {
     return [
       {
-        label: 'Двухуровневый домен',
-        url: `https://${sub}.${zone}.${domain}`,
+        label: 'Независимый Root · 2 уровень (без ICANN)',
+        url: `http://${sub}.${zone}`,
         recommended: true,
+      },
+      {
+        label: 'ICANN-шлюз (работает без настройки DNS)',
+        url: `https://${sub}.${zone}.${domain}`,
       },
       {
         label: 'На хосте зоны',
@@ -104,9 +108,13 @@ export function buildResolverLinks(options: {
 
   return [
     {
-      label: 'Хост зоны',
-      url: `https://${zone}.${domain}`,
+      label: 'Независимый Root · 1 уровень (без ICANN)',
+      url: `http://${zone}`,
       recommended: true,
+    },
+    {
+      label: 'ICANN-шлюз (работает без настройки DNS)',
+      url: `https://${zone}.${domain}`,
     },
     {
       label: 'Путь на основном домене',

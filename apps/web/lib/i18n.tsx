@@ -16,6 +16,7 @@ export const dictionary = {
   'nav.auctions': { ru: 'Аукционы', en: 'Auctions' },
   'nav.zones': { ru: 'Зоны', en: 'Zones' },
   'nav.subdomains': { ru: 'Поддомены', en: 'Subdomains' },
+  'nav.root': { ru: 'Root DNS', en: 'Root DNS' },
   'nav.register': { ru: 'Регистрация', en: 'Register' },
   'nav.dashboard': { ru: 'Кабинет', en: 'Dashboard' },
   'nav.admin': { ru: 'Админ', en: 'Admin' },

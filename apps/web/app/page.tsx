@@ -205,9 +205,9 @@ export default function HomePage() {
 
                   <div className="space-y-2 border-t border-border/50 pt-4 text-xs">
                     {[
-                      { host: `${previewZone || 'brand'}.justtld.online`, tag: 'Сайт' },
-                      { host: `app.${previewZone || 'brand'}.justtld.online`, tag: 'Поддомен' },
-                      { host: `dns.${previewZone || 'brand'}.justtld.online`, tag: 'DNS' },
+                      { host: `http://${previewZone || 'brand'}`, tag: 'Root 1 ур.' },
+                      { host: `http://app.${previewZone || 'brand'}`, tag: 'Root 2 ур.' },
+                      { host: `${previewZone || 'brand'}.justtld.online`, tag: 'ICANN-шлюз' },
                     ].map((row) => (
                       <div
                         key={row.host}

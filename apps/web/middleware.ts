@@ -20,6 +20,7 @@ const RESERVED_PATHS = new Set([
   'login',
   'register',
   'resolve',
+  'root',
   'sites',
   'store',
   'subdomains',
@@ -55,7 +56,30 @@ function requestHost(request: NextRequest): string {
  *   myzone.example.com        → зона .myzone
  *   blog.myzone.example.com   → поддомен blog в зоне .myzone
  */
-function resolverTarget(request: NextRequest): { zone: string; label: string | null } | null {
+function resolverTarget(
+  request: NextRequest,
+): { zone: string; label: string | null; root?: boolean } | null {
+  const isRootGateway = request.headers.get('x-justtld-root') === '1';
+  const forwarded =
+    (request.headers.get('x-forwarded-host') ?? '').toLowerCase().split(':')[0] ?? '';
+
+  // Независимый корень (без ICANN): 1-й уровень `myzone` или 2-й уровень `blog.myzone`
+  if (isRootGateway && forwarded && !forwarded.endsWith('.justtld.online') && !forwarded.endsWith('.duckdns.org') && !forwarded.endsWith('.onrender.com')) {
+    const parts = forwarded.split('.');
+    if (parts.length === 1 && parts[0] && /^[a-z0-9][a-z0-9-]{0,62}$/.test(parts[0]) && parts[0] !== 'localhost') {
+      return { zone: parts[0], label: null, root: true };
+    }
+    if (
+      parts.length === 2 &&
+      parts[0] &&
+      parts[1] &&
+      /^[a-z0-9][a-z0-9-]{0,31}$/.test(parts[0]) &&
+      /^[a-z0-9][a-z0-9-]{0,62}$/.test(parts[1])
+    ) {
+      return { zone: parts[1], label: parts[0], root: true };
+    }
+  }
+
   const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
   if (!base) return null;
   const host = requestHost(request);
@@ -64,7 +88,7 @@ function resolverTarget(request: NextRequest): { zone: string; label: string | n
   if (!prefix) return null;
   const parts = prefix.split('.');
   const first = parts[0] ?? '';
-  if (['www', 'api', 'admin', 'app'].includes(first)) return null;
+  if (['www', 'api', 'admin', 'app', 'root'].includes(first)) return null;
   if (parts.length === 1) {
     // Одноуровневое имя: myzone.justtld.online → зона .myzone.
     // Плоский поддомен: blog--myzone.justtld.online → blog.myzone.
@@ -113,6 +137,7 @@ export function middleware(request: NextRequest) {
       url.pathname = '/api/site-serve';
       const params = [`zone=${encodeURIComponent(target.zone)}`];
       if (target.label) params.push(`label=${encodeURIComponent(target.label)}`);
+      if (target.root) params.push('root=1');
       params.push(`path=${encodeURIComponent(pathname)}`);
       url.search = `?${params.join('&')}`;
       return NextResponse.rewrite(url);

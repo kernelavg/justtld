@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 const BASE_NAV: Array<{ href: string; key: TranslationKey }> = [
   { href: '/store', key: 'nav.store' },
   { href: '/auctions', key: 'nav.auctions' },
+  { href: '/root', key: 'nav.root' },
   { href: '/zones', key: 'nav.zones' },
   { href: '/subdomains', key: 'nav.subdomains' },
   { href: '/dashboard', key: 'nav.dashboard' },

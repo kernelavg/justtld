@@ -106,6 +106,7 @@ export function SiteManager({ tld, isOwner, hasSession, onRequireAuth }: Props) 
   } | null>(null);
 
   const cleanTld = tld.replace(/^\./, '');
+  const rootUrl = subLabel ? `http://${subLabel}.${cleanTld}` : `http://${cleanTld}`;
   const siteUrl = subLabel
     ? `https://${subLabel}.${cleanTld}.${resolverDomain}`
     : `https://${cleanTld}.${resolverDomain}`;
@@ -346,8 +347,9 @@ export function SiteManager({ tld, isOwner, hasSession, onRequireAuth }: Props) 
                 Встроенный хостинг и файлы сайта
               </CardTitle>
               <CardDescription className="mt-1">
-                Файлы хранятся в PostgreSQL и мгновенно раздаются по домену{' '}
-                <span className="mono font-medium text-foreground">{siteUrl}</span>
+                Root-домен (1–2 ур., без ICANN):{' '}
+                <span className="mono font-semibold text-foreground">{rootUrl}</span> · Шлюз:{' '}
+                <span className="mono text-foreground">{siteUrl}</span>
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -356,9 +358,14 @@ export function SiteManager({ tld, isOwner, hasSession, onRequireAuth }: Props) 
                   Предпросмотр <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </Button>
+              <Button variant="outline" size="sm" asChild className="gap-1.5">
+                <a href={rootUrl} target="_blank" rel="noreferrer">
+                  {rootUrl.replace(/^https?:\/\//, '')} <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </Button>
               <Button size="sm" asChild className="gap-1.5">
                 <a href={siteUrl} target="_blank" rel="noreferrer">
-                  Открыть сайт <ExternalLink className="h-3.5 w-3.5" />
+                  Открыть через шлюз <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </Button>
             </div>

@@ -33,6 +33,9 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
   const [error, setError] = React.useState<string | null>(null);
 
   const [fqdn, setFqdn] = React.useState('');
+  const [rootFqdn, setRootFqdn] = React.useState('');
+  const [dohUrl, setDohUrl] = React.useState('https://root.justtld.online/dns-query');
+  const [scope, setScope] = React.useState<'root' | 'gateway'>('root');
   const [serverIp, setServerIp] = React.useState('95.182.89.37');
   const [cfConfigured, setCfConfigured] = React.useState(false);
   const [cfError, setCfError] = React.useState<string | null>(null);
@@ -66,6 +69,8 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
     try {
       const res = await getDnsRecords(tld, subLabel);
       setFqdn(res.fqdn);
+      setRootFqdn(res.rootFqdn ?? (subLabel ? `${subLabel}.${cleanTld}` : cleanTld));
+      if (res.dohUrl) setDohUrl(res.dohUrl);
       setServerIp(res.serverIp);
       setCfConfigured(res.cloudflareConfigured);
       setCfError(res.cloudflareError);
@@ -76,7 +81,7 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [hasSession, tld, subLabel]);
+  }, [hasSession, tld, subLabel, cleanTld]);
 
   React.useEffect(() => {
     void loadDns();
@@ -93,11 +98,14 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
         content: content.trim(),
         ttl: Number(ttl) || 300,
         priority: type === 'MX' ? Number(priority) || 10 : null,
+        scope,
       });
       toast.success(
-        res.synced
-          ? `DNS-запись ${res.record.recordType} создана и синхронизирована с Cloudflare`
-          : `DNS-запись ${res.record.recordType} сохранена в базе`,
+        scope === 'root'
+          ? `Запись ${res.record.recordType} для ${res.record.fqdn} добавлена в JustTLD Root DNS`
+          : res.synced
+            ? `DNS-запись ${res.record.recordType} синхронизирована с Cloudflare`
+            : `DNS-запись ${res.record.recordType} сохранена в базе`,
       );
       setContent('');
       await loadDns();
@@ -158,17 +166,24 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Network className="h-5 w-5 text-primary" />
-                DNS-панель (Cloudflare DNS)
+                DNS-панель (Root без ICANN + Шлюз)
               </CardTitle>
               <CardDescription className="mt-1">
-                Управление реальными DNS-записями домена{' '}
-                <span className="mono font-medium text-foreground">{fqdn || `${cleanTld}.justtld.online`}</span>
+                Независимый Root-домен:{' '}
+                <span className="mono font-semibold text-foreground">
+                  {rootFqdn || (subLabel ? `${subLabel}.${cleanTld}` : cleanTld)}
+                </span>{' '}
+                · Шлюз:{' '}
+                <span className="mono text-foreground">{fqdn || `${cleanTld}.justtld.online`}</span>
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={cfConfigured ? 'success' : 'warning'} className="gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="success" className="gap-1">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                {cfConfigured ? 'Cloudflare подключён' : 'Cloudflare не настроен (БД)'}
+                Root DNS активен
+              </Badge>
+              <Badge variant={cfConfigured ? 'outline' : 'secondary'} className="gap-1">
+                {cfConfigured ? 'Cloudflare шлюз OK' : 'Шлюз БД'}
               </Badge>
               <Button
                 variant="ghost"
@@ -183,12 +198,44 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs">
+            <div className="font-medium text-foreground">
+              Как Handshake: зона 1-го и 2-го уровня без ICANN
+            </div>
+            <div className="mt-1 text-muted-foreground">
+              По умолчанию <span className="mono text-foreground">{rootFqdn || cleanTld}</span> и{' '}
+              <span className="mono text-foreground">*.{cleanTld}</span> уже направлены на хостинг{' '}
+              <span className="mono">{serverIp}</span> через DoH{' '}
+              <span className="mono text-foreground">{dohUrl}</span>. Вы можете направить домен на свой сервер через A/AAAA/CNAME.
+            </div>
+          </div>
+
           {cfError && (
             <Alert variant="destructive">
               <AlertTitle>Предупреждение Cloudflare</AlertTitle>
               <AlertDescription>{cfError}</AlertDescription>
             </Alert>
           )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Сеть записи:</span>
+            <Button
+              type="button"
+              variant={scope === 'root' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setScope('root')}
+            >
+              Root 1–2 ур. ({rootFqdn || cleanTld})
+            </Button>
+            <Button
+              type="button"
+              variant={scope === 'gateway' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setScope('gateway')}
+            >
+              ICANN-шлюз ({fqdn || `${cleanTld}.justtld.online`})
+            </Button>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Быстрые пресеты:</span>
@@ -339,8 +386,8 @@ export function DnsManager({ tld, isOwner, hasSession, onRequireAuth }: Props) {
                       <Badge variant="secondary">MX {rec.priority}</Badge>
                     )}
                     <span className="text-muted-foreground">TTL {rec.ttl}</span>
-                    <Badge variant={rec.cfRecordId ? 'success' : 'secondary'}>
-                      {rec.cfRecordId ? 'Cloudflare' : 'Только БД'}
+                    <Badge variant={rec.cfRecordId ? 'success' : 'outline'}>
+                      {rec.cfRecordId ? 'Cloudflare шлюз' : 'JustTLD Root DNS'}
                     </Badge>
                   </div>
                   <Button

@@ -522,6 +522,8 @@ export const getDnsRecords = (tld: string, sub = '') =>
     tld: string;
     subLabel: string;
     fqdn: string;
+    rootFqdn?: string;
+    dohUrl?: string;
     resolverDomain: string;
     serverIp: string;
     cloudflareConfigured: boolean;
@@ -544,7 +546,8 @@ export const createDnsRecord = (payload: {
   content: string;
   ttl?: number;
   priority?: number | null;
-}) => postJson<{ ok: boolean; record: DnsRecordDto; synced: boolean }>('/api/dns', payload);
+  scope?: 'root' | 'gateway';
+}) => postJson<{ ok: boolean; record: DnsRecordDto; synced: boolean; scope?: 'root' | 'gateway' }>('/api/dns', payload);
 
 export const deleteDnsRecordApi = (tld: string, id: string, sub = '') =>
   apiFetch<{ ok: boolean; id: string }>(

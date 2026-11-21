@@ -156,3 +156,34 @@ describe('middleware: заголовки безопасности', () => {
     expect(rewriteOf(await middleware(request))).toBeNull();
   });
 });
+
+describe('резолвер: независимый Root DNS (1-й и 2-й уровень без ICANN)', () => {
+  it('1-й уровень (http://expline) через Root Gateway → сайт зоны с root=1', async () => {
+    const response = await run('justtld.onrender.com', '/', {
+      'x-forwarded-host': 'expline',
+      'x-justtld-root': '1',
+    });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({ zone: 'expline', root: '1', path: '/' });
+  });
+
+  it('2-й уровень (http://shop.expline) через Root Gateway → сайт поддомена с root=1', async () => {
+    const response = await run('justtld.onrender.com', '/catalog', {
+      'x-forwarded-host': 'shop.expline',
+      'x-justtld-root': '1',
+    });
+    expect(rewriteOf(response)?.pathname).toBe('/api/site-serve');
+    expect(queryOf(response)).toEqual({
+      zone: 'expline',
+      label: 'shop',
+      root: '1',
+      path: '/catalog',
+    });
+  });
+
+  it('служебный путь /root и хост root.justtld.online не перехватываются как зона', async () => {
+    expect(rewriteOf(await run(DOMAIN, '/root'))).toBeNull();
+    expect(rewriteOf(await run(`root.${DOMAIN}`))).toBeNull();
+  });
+});
+

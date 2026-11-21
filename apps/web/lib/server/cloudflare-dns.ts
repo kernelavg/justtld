@@ -5,6 +5,20 @@ export function cloudflareDnsEnabled(): boolean {
   return Boolean(cfApiToken() && cfZoneId());
 }
 
+/** Строит нативный домен 1-го или 2-го уровня в независимом корне JustTLD (без ICANN). */
+export function buildRootFqdn(tld: string, subLabel = ''): string {
+  const zone = tld.replace(/^\.+/, '').toLowerCase();
+  const sub = subLabel.trim().toLowerCase();
+  if (!zone || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(zone)) {
+    throw ApiError.badRequest('INVALID_TLD', 'Некорректная зона для DNS');
+  }
+  if (!sub) return zone;
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(sub) || sub.includes('--')) {
+    throw ApiError.badRequest('INVALID_LABEL', 'Некорректная метка поддомена для DNS');
+  }
+  return `${sub}.${zone}`;
+}
+
 /** Строит безопасный FQDN строго внутри домена резолвера, не давая тронуть корень и системные имена. */
 export function buildSafeFqdn(tld: string, subLabel = ''): string {
   const domain = resolverDomain();

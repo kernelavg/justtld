@@ -288,6 +288,7 @@ export const dnsRecordCreateSchema = z.object({
   content: z.string().trim().min(1, 'DNS_CONTENT_EMPTY').max(512),
   ttl: z.coerce.number().int().min(60).max(86400).default(120),
   priority: z.coerce.number().int().min(0).max(65535).nullable().optional(),
+  scope: z.enum(['root', 'gateway']).optional().default('root'),
 });
 
 export const createAuctionSchema = z.object({
