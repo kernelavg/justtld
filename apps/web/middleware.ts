@@ -7,6 +7,25 @@ import { NextResponse, type NextRequest } from 'next/server';
  *  - запрет кэширования API,
  *  - блокировка небезопасных методов с чужого Origin (дополнительно к проверке в route-handlers).
  */
+/** Маршруты самого сайта — их резолвер не перехватывает никогда. */
+const RESERVED_PATHS = new Set([
+  'address',
+  'admin',
+  'api',
+  'block',
+  'dashboard',
+  'docs',
+  'explorer',
+  'register',
+  'resolve',
+  'tx',
+  'zone',
+  'zones',
+  'favicon.ico',
+  'robots.txt',
+  'sitemap.xml',
+]);
+
 /** Возвращает имя зоны, если запрос пришёл на поддомен резолвера: myzone.example.com → myzone */
 function resolverZone(request: NextRequest): string | null {
   const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
@@ -19,6 +38,21 @@ function resolverZone(request: NextRequest): string | null {
   return label;
 }
 
+/**
+ * Имя зоны из пути: /myzone → myzone. Работает, пока своего домена нет, —
+ * так имя открывается в браузере уже сегодня: <сайт>/myzone.
+ */
+function zoneFromPath(request: NextRequest): string | null {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return null;
+  const path = request.nextUrl.pathname;
+  if (!path.startsWith('/') || path === '/') return null;
+  const label = path.slice(1);
+  if (!label || label.includes('/')) return null;
+  if (RESERVED_PATHS.has(label.toLowerCase())) return null;
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(label)) return null;
+  return label;
+}
+
 export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== 'production';
 
@@ -28,6 +62,15 @@ export function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/resolve';
     url.search = `?zone=${encodeURIComponent(zone)}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // Тот же резолвер без своего домена: /myzone открывает зону .myzone.
+  const pathZone = zone ? null : zoneFromPath(request);
+  if (pathZone) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/resolve';
+    url.search = `?zone=${encodeURIComponent(pathZone)}&via=path`;
     return NextResponse.rewrite(url);
   }
 

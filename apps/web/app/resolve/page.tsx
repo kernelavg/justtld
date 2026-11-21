@@ -15,10 +15,16 @@ export const dynamic = 'force-dynamic';
 export default async function ResolvePage({
   searchParams,
 }: {
-  searchParams: Promise<{ zone?: string }>;
+  searchParams: Promise<{ zone?: string; via?: string }>;
 }) {
-  const { zone: raw } = await searchParams;
+  const { zone: raw, via } = await searchParams;
+  // via=path — имя открыто по пути (site/myzone), а не по поддомену: подсказываем разницу.
+  const pathMode = via === 'path';
   const label = decodeURIComponent(raw ?? '').trim();
+  // В режиме пути (без своего домена) поясняем, как это же имя будет выглядеть с доменом.
+  const pathHint = pathMode
+    ? `Имя открыто по пути: /${label}. Когда задан RESOLVER_DOMAIN, этот же адрес станет ${label}.вашдомен — см. docs/DEPLOY-PAAS.md §3.`
+    : undefined;
   const tld = normalizeTld(label);
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://justtld.onrender.com').replace(
     /\/+$/,
@@ -27,7 +33,7 @@ export default async function ResolvePage({
 
   if (!label) {
     return (
-      <Shell title="Резолвер JustTLD">
+      <Shell title="Резолвер JustTLD" hint={pathHint}>
         <p className="text-muted-foreground">
           Этот домен обслуживает зоны JustTLD. Откройте <code>имя.домен</code> или вернитесь на{' '}
           <a className="underline" href={appUrl}>
@@ -73,7 +79,7 @@ export default async function ResolvePage({
   if (!zone || zone.status !== 'active') {
     const expired = zone?.status === 'expired';
     return (
-      <Shell title={tld}>
+      <Shell title={tld} hint={pathHint}>
         <p className="text-lg font-medium">{expired ? 'Срок этой зоны истёк' : 'Зона свободна'}</p>
         <p className="text-muted-foreground">
           {expired
@@ -96,7 +102,7 @@ export default async function ResolvePage({
 
   const metadata = prettyMetadata(zone.metadata);
   return (
-    <Shell title={tld}>
+    <Shell title={tld} hint={pathHint}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="rounded-full bg-success/10 px-2 py-0.5 text-success">активна</span>
         <span className="text-muted-foreground">
@@ -194,7 +200,15 @@ function prettyMetadata(metadata: string): string {
   }
 }
 
-function Shell({ title, children }: { title: string; children: React.ReactNode }) {
+function Shell({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <main className="container flex min-h-[70vh] flex-col items-center justify-center py-16">
       <div className="w-full max-w-xl space-y-4 rounded-xl border bg-card p-6 shadow-sm">
@@ -206,6 +220,7 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
         Данные читаются из блокчейна через индексер. Имя принадлежит владельцу кошелька, а не
         серверу.
       </p>
+      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </main>
   );
 }

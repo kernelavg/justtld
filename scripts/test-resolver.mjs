@@ -73,35 +73,54 @@ function check(label, condition, detail = '') {
 const root = await fetchHost(DOMAIN);
 check(`главная на ${DOMAIN}`, root.status === 200 && !root.body.includes('JustTLD resolver'));
 
-// 2. Существующая зона показывает карточку с владельцем.
+// Дальше два блока: поддомены (нужен RESOLVER_DOMAIN на сервере) и пути (работают всегда).
 const zone = await fetchHost(`myzone.${DOMAIN}`);
-check(
-  `зона myzone.${DOMAIN}`,
-  zone.status === 200 && zone.body.includes('JustTLD resolver') && zone.body.includes('.myzone'),
-);
+const subdomainMode = zone.status === 200 && zone.body.includes('JustTLD resolver');
 
-// 3. Свободное имя предлагает регистрацию.
-const free = await fetchHost(`free-${Date.now().toString(36)}.${DOMAIN}`);
-check(
-  `свободное имя на ${DOMAIN}`,
-  free.status === 200 && (free.body.includes('Зона свободна') || free.body.includes('Свободна')),
-);
+if (!subdomainMode) {
+  console.log(`ℹ️  поддомены пропущены: сервер запущен без RESOLVER_DOMAIN=${DOMAIN}`);
+} else {
+  check(`зона myzone.${DOMAIN}`, zone.body.includes('.myzone'));
 
-// 4. Служебные поддомены не перехватываются резолвером.
-for (const label of ['www', 'api', 'admin']) {
-  const service = await fetchHost(`${label}.${DOMAIN}`);
+  const free = await fetchHost(`free-${Date.now().toString(36)}.${DOMAIN}`);
   check(
-    `служебный ${label}.${DOMAIN} не резолвится как зона`,
-    !service.body.includes('JustTLD resolver'),
+    `свободное имя на ${DOMAIN}`,
+    free.status === 200 && (free.body.includes('Зона свободна') || free.body.includes('Свободна')),
+  );
+
+  for (const label of ['www', 'api', 'admin']) {
+    const service = await fetchHost(`${label}.${DOMAIN}`);
+    check(
+      `служебный ${label}.${DOMAIN} не резолвится как зона`,
+      !service.body.includes('JustTLD resolver'),
+    );
+  }
+
+  const redirectZone = await fetchHost(`justtld-demo.${DOMAIN}`);
+  check(
+    'зона с url в метаданных отдаёт редирект',
+    redirectZone.status >= 300 && redirectZone.status < 400 && Boolean(redirectZone.location),
+    `HTTP ${redirectZone.status} → ${redirectZone.location ?? '—'}`,
   );
 }
 
-// 5. Зона с адресом сайта в метаданных уводит редиректом.
-const redirectZone = await fetchHost(`justtld-demo.${DOMAIN}`);
+// 6. Режим без своего домена: имя по пути на основном адресе сайта.
+const pathZone = await fetchHost(viaDns ? DOMAIN : new URL(BASE).host, '/myzone');
 check(
-  'зона с url в метаданных отдаёт редирект',
-  redirectZone.status >= 300 && redirectZone.status < 400 && Boolean(redirectZone.location),
-  `HTTP ${redirectZone.status} → ${redirectZone.location ?? '—'}`,
+  'путь /myzone открывает зону .myzone',
+  pathZone.status === 200 && pathZone.body.includes('.myzone'),
+);
+
+const pathFree = await fetchHost(viaDns ? DOMAIN : new URL(BASE).host, '/totally-free-name');
+check(
+  'путь /totally-free-name предлагает регистрацию',
+  pathFree.status === 200 && pathFree.body.includes('Зона свободна'),
+);
+
+const realPage = await fetchHost(viaDns ? DOMAIN : new URL(BASE).host, '/zones');
+check(
+  'реальный раздел /zones не перехвачен резолвером',
+  realPage.status === 200 && !realPage.body.includes('JustTLD resolver'),
 );
 
 console.log(failures === 0 ? '\nРезолвер работает.' : `\nПровалено проверок: ${failures}`);
