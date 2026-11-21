@@ -16,6 +16,10 @@ export default defineConfig({
         root,
         'packages/shared/src/generated/registry.ts',
       ),
+      '@justtld/shared/generated/subdomains': path.join(
+        root,
+        'packages/shared/src/generated/subdomains.ts',
+      ),
       '@justtld/shared/env': path.join(root, 'packages/shared/src/env.ts'),
       '@justtld/shared/deployment': path.join(root, 'packages/shared/src/deployment.ts'),
       '@justtld/shared/tld': path.join(root, 'packages/shared/src/tld.ts'),
