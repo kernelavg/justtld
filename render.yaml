@@ -35,6 +35,9 @@ services:
       # Пусто = резолвер выключен. Задаётся в дашборде: Settings → Environment.
       - key: RESOLVER_DOMAIN
         sync: false
+      # Контракт поддоменов (зоны — в реестре, поддомены — в нём; см. docs/SUBDOMAINS.md).
+      - key: SUBDOMAINS_ADDRESS
+        value: '0xa6565Dc205b2Af794ff4582dB1A6438CDF922c35'
       # ── база ──
       - key: DATABASE_URL
         sync: false

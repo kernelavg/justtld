@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ZoneStatusBadge } from '@/components/zones/status-badge';
 import { ZoneActions } from '@/components/zones/zone-actions';
+import { ZoneSubdomains } from '@/components/zones/subdomains';
 import { useExplorerUrl } from '@/components/tx/tx-status';
 
 type ZoneResponse = {
@@ -126,6 +127,10 @@ export default function ZonePage() {
           )}
         </div>
         <ZoneActions zone={view as ZoneDto} onChanged={reload} />
+      </div>
+
+      <div className="mt-6">
+        <ZoneSubdomains zone={view as ZoneDto} onChanged={reload} />
       </div>
 
       {view.status === 'blocked' && (

@@ -108,3 +108,38 @@ export type SessionUser = {
   address: string;
   role: 'admin' | 'user';
 };
+
+/** Поддомен внутри зоны (`blog.femboy`). */
+export type SubdomainDto = {
+  id: string;
+  /** Полное имя без ведущей точки: `blog.femboy`. */
+  name: string;
+  /** Родительская зона: `.femboy`. */
+  tld: string;
+  /** Метка: `blog`. */
+  label: string;
+  ownerAddress: string;
+  /** Владелец зоны, зарегистрировавший поддомен (поколение зоны). */
+  zoneOwnerAddress: string;
+  status: ZoneStatus;
+  registeredAt: string;
+  expiresAt: string;
+  updatedAt: string;
+  metadata: string;
+  transactionHash: string;
+  blockNumber: number;
+};
+
+export type SubdomainEventType =
+  'registered' | 'transferred' | 'renewed' | 'metadata_updated' | 'blocked' | 'unblocked';
+
+export type SubdomainEventDto = {
+  id: string;
+  name: string;
+  eventType: SubdomainEventType;
+  actorAddress: string;
+  transactionHash: string;
+  blockNumber: number;
+  details: Record<string, unknown>;
+  createdAt: string;
+};

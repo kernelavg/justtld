@@ -69,6 +69,43 @@ export const prepareRegistrationSchema = z.object({
   sender: addressSchema,
 });
 
+/** Метка поддомена: 1–32 символа, a-z/0-9/-, без дефисов по краям и без `--`. */
+export const subdomainLabelSchema = z
+  .string()
+  .trim()
+  .min(1, 'LABEL_EMPTY')
+  .max(32, 'LABEL_LENGTH')
+  .regex(/^[A-Za-z0-9-]+$/, 'LABEL_INVALID_CHARACTER')
+  .refine((value) => !value.startsWith('-') && !value.endsWith('-'), 'LABEL_HYPHEN_EDGE')
+  .refine((value) => !value.includes('--'), 'LABEL_DOUBLE_HYPHEN');
+
+export const prepareSubdomainRegistrationSchema = z.object({
+  tld: tldSchema,
+  label: subdomainLabelSchema,
+  metadata: metadataSchema.optional().default(''),
+  sender: addressSchema,
+});
+
+export const prepareSubdomainTransferSchema = z.object({
+  tld: tldSchema,
+  label: subdomainLabelSchema,
+  to: addressSchema,
+  sender: addressSchema,
+});
+
+export const prepareSubdomainMetadataSchema = z.object({
+  tld: tldSchema,
+  label: subdomainLabelSchema,
+  metadata: metadataSchema,
+  sender: addressSchema,
+});
+
+export const prepareSubdomainRenewalSchema = z.object({
+  tld: tldSchema,
+  label: subdomainLabelSchema,
+  sender: addressSchema,
+});
+
 export const prepareTransferSchema = z.object({
   tld: tldSchema,
   to: addressSchema,
@@ -125,6 +162,10 @@ export const confirmTxSchema = z.object({
 
 export type ZonesQuery = z.infer<typeof zonesQuerySchema>;
 export type PrepareRegistrationInput = z.infer<typeof prepareRegistrationSchema>;
+export type PrepareSubdomainRegistrationInput = z.infer<typeof prepareSubdomainRegistrationSchema>;
+export type PrepareSubdomainTransferInput = z.infer<typeof prepareSubdomainTransferSchema>;
+export type PrepareSubdomainMetadataInput = z.infer<typeof prepareSubdomainMetadataSchema>;
+export type PrepareSubdomainRenewalInput = z.infer<typeof prepareSubdomainRenewalSchema>;
 export type PrepareTransferInput = z.infer<typeof prepareTransferSchema>;
 export type PrepareRenewalInput = z.infer<typeof prepareRenewalSchema>;
 export type PrepareMetadataInput = z.infer<typeof prepareMetadataSchema>;

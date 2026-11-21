@@ -49,10 +49,25 @@ const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL?.trim() || '';
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: '0.8.24',
-    settings: {
-      optimizer: { enabled: true, runs: 200 },
-      evmVersion: 'paris',
+    compilers: [
+      {
+        version: '0.8.24',
+        settings: {
+          optimizer: { enabled: true, runs: 200 },
+          evmVersion: 'paris',
+        },
+      },
+    ],
+    overrides: {
+      // После репрайсинга газа 2026 лимит tx (16 777 216) вмещает ~10.4 КБ рантайма,
+      // поэтому контракт поддоменов оптимизируем строго под размер.
+      'contracts/JustTLDSubdomains.sol': {
+        version: '0.8.24',
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          evmVersion: 'paris',
+        },
+      },
     },
   },
   networks: {

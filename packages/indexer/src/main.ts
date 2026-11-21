@@ -57,6 +57,9 @@ function buildContext(config: IndexerConfig, persistCheckpoint = true): Processo
     abi: config.abi,
     persistCheckpoint,
     log,
+    subdomains: config.subdomainsAddress
+      ? { address: config.subdomainsAddress, abi: config.subdomainsAbi }
+      : null,
   };
 }
 
@@ -75,6 +78,11 @@ async function bootstrap(): Promise<{ config: IndexerConfig; ctx: ProcessorConte
   log(`сеть ${config.rpcUrl} (chainId ${config.chainId})`);
   log(
     `контракт ${config.address}, стартовый блок ${config.startBlock}, подтверждений ${config.confirmations}`,
+  );
+  log(
+    config.subdomainsAddress
+      ? `поддомены: ${config.subdomainsAddress} (с блока ${config.subdomainsDeployBlock})`
+      : 'поддомены: контракт не найден (deployments/*.subdomains.json или SUBDOMAINS_ADDRESS)',
   );
   return { config, ctx };
 }

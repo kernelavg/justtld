@@ -1,13 +1,18 @@
 import { decodeEventLog, type Abi } from 'viem';
 import {
   CONTRACT_EVENT_TO_TYPE,
+  SUBDOMAIN_EVENT_TO_TYPE,
   type ContractEventName,
+  type SubdomainContractEventName,
+  type SubdomainEventType,
   type ZoneEventType,
 } from '@justtld/shared';
+import { SUBDOMAINS_ABI } from '@justtld/shared/generated/subdomains';
 import * as db from '@justtld/db';
 import {
   getBlock,
   getContractLogs,
+  readSubdomain,
   readZone,
   zoneStatusFromChain,
   type ChainClient,
@@ -22,6 +27,8 @@ export type ProcessorContext = {
   /** Писать ли чекпоинт в БД (в тестах можно отключить, чтобы не мешать основному индексатору). */
   persistCheckpoint: boolean;
   log: (message: string) => void;
+  /** Контракт поддоменов: если задан, индексируются и его события. */
+  subdomains?: { address: `0x${string}`; abi: readonly unknown[] } | null;
 };
 
 export type DecodedZoneEvent = {
@@ -120,6 +127,115 @@ export function decodeZoneLog(log: RawLog): DecodedZoneEvent | null {
   };
 }
 
+export type DecodedSubdomainEvent = {
+  eventName: SubdomainContractEventName;
+  eventType: SubdomainEventType;
+  /** Полное имя: `blog.femboy`. */
+  name: string;
+  /** Родительская зона: `.femboy`. */
+  tld: string;
+  /** Метка: `blog`. */
+  label: string;
+  actor: string;
+  transactionHash: string;
+  blockNumber: number;
+  blockHash: string;
+  logIndex: number;
+  details: Record<string, unknown>;
+};
+
+const SUBDOMAIN_EVENTS = new Set<string>(Object.keys(SUBDOMAIN_EVENT_TO_TYPE));
+
+/** Разбирает `blog.femboy` на метку и зону (зона всегда с ведущей точкой). */
+export function splitSubdomainName(name: string): { label: string; tld: string } | null {
+  const index = name.indexOf('.');
+  if (index <= 0 || index === name.length - 1) return null;
+  return { label: name.slice(0, index), tld: name.slice(index) };
+}
+
+/** Декодирует лог контракта поддоменов. null — служебный или неизвестный лог. */
+export function decodeSubdomainLog(log: RawLog): DecodedSubdomainEvent | null {
+  if (
+    !log.topics?.[0] ||
+    !log.transactionHash ||
+    log.blockNumber === null ||
+    log.logIndex === null
+  ) {
+    return null;
+  }
+  let decoded: { eventName?: string; args?: unknown };
+  try {
+    decoded = decodeEventLog({
+      abi: SUBDOMAINS_ABI as unknown as Abi,
+      data: log.data,
+      topics: log.topics,
+    }) as unknown as { eventName?: string; args?: unknown };
+  } catch {
+    return null;
+  }
+  const eventName = decoded.eventName;
+  if (!eventName || !SUBDOMAIN_EVENTS.has(eventName)) return null;
+
+  const args = (decoded.args ?? {}) as Record<string, unknown>;
+  const name = typeof args.name === 'string' ? args.name.toLowerCase() : null;
+  if (!name) return null;
+  const parts = splitSubdomainName(name);
+  if (!parts) return null;
+
+  const asAddress = (value: unknown): string =>
+    typeof value === 'string' ? value.toLowerCase() : '';
+  const asNumber = (value: unknown): number =>
+    typeof value === 'bigint' ? Number(value) : Number(value ?? 0);
+  const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+  const eventType = SUBDOMAIN_EVENT_TO_TYPE[eventName as SubdomainContractEventName];
+  let actor = '';
+  let details: Record<string, unknown> = {};
+
+  switch (eventName) {
+    case 'SubdomainRegistered':
+      actor = asAddress(args.owner);
+      details = { tld: asString(args.zone), expiresAt: asNumber(args.expiresAt) };
+      break;
+    case 'SubdomainTransferred':
+      actor = asAddress(args.from);
+      details = { from: asAddress(args.from), to: asAddress(args.to) };
+      break;
+    case 'SubdomainRenewed':
+      actor = '';
+      details = { newExpiresAt: asNumber(args.expiresAt) };
+      break;
+    case 'SubdomainMetadataUpdated':
+      actor = asAddress(args.owner);
+      details = { metadata: asString(args.metadata) };
+      break;
+    case 'SubdomainBlocked':
+      actor = asAddress(args.admin);
+      details = { reason: asString(args.reason) };
+      break;
+    case 'SubdomainUnblocked':
+      actor = asAddress(args.admin);
+      details = {};
+      break;
+    default:
+      return null;
+  }
+
+  return {
+    eventName: eventName as SubdomainContractEventName,
+    eventType,
+    name,
+    tld: parts.tld,
+    label: parts.label,
+    actor,
+    transactionHash: log.transactionHash,
+    blockNumber: Number(log.blockNumber),
+    blockHash: log.blockHash ?? '',
+    logIndex: log.logIndex,
+    details: { ...details, timestamp: asNumber(args.timestamp) },
+  };
+}
+
 let registryAbi: Abi = [] as unknown as Abi;
 export function setRegistryAbi(abi: readonly unknown[]): void {
   registryAbi = abi as unknown as Abi;
@@ -149,6 +265,17 @@ export async function processRange(
     toBlock,
   });
 
+  // Поддомены живут в отдельном контракте — забираем и его логи за тот же диапазон.
+  const subdomainsAddress = ctx.subdomains?.address?.toLowerCase();
+  if (ctx.subdomains) {
+    const subLogs = await getContractLogs(ctx.client, {
+      address: ctx.subdomains.address,
+      fromBlock,
+      toBlock,
+    });
+    logs.push(...subLogs);
+  }
+
   const grouped = new Map<number, RawLog[]>();
   for (const log of logs) {
     if (log.blockNumber === null) continue;
@@ -169,6 +296,72 @@ export async function processRange(
 
     await db.withTransaction(async (client) => {
       for (const rawLog of blockLogs) {
+        if (subdomainsAddress && rawLog.address?.toLowerCase() === subdomainsAddress) {
+          const subEvent = decodeSubdomainLog(rawLog);
+          if (!subEvent) {
+            skipped += 1;
+            continue;
+          }
+          const freshSub = await db.markLogProcessed(client, {
+            transactionHash: subEvent.transactionHash,
+            logIndex: subEvent.logIndex,
+            blockNumber: subEvent.blockNumber,
+            blockHash: block.hash ?? '',
+            eventName: subEvent.eventName,
+          });
+          if (!freshSub) {
+            skipped += 1;
+            continue;
+          }
+
+          const chainSub = await readSubdomain(
+            ctx.client,
+            ctx.subdomains?.address ?? ctx.address,
+            subEvent.tld,
+            subEvent.label,
+          );
+          if (!chainSub) {
+            ctx.log(`! поддомен ${subEvent.name} отсутствует в контракте — пропущено`);
+            skipped += 1;
+            continue;
+          }
+
+          const nowSeconds = Math.floor(Date.now() / 1000);
+          const subStatus = chainSub.blocked
+            ? 'blocked'
+            : chainSub.expiresAt <= nowSeconds
+              ? 'expired'
+              : 'active';
+
+          const subdomain = await db.upsertSubdomainSnapshot(client, {
+            name: subEvent.name,
+            tld: subEvent.tld,
+            label: subEvent.label,
+            ownerAddress: chainSub.owner,
+            zoneOwnerAddress: chainSub.zoneOwner,
+            status: subStatus,
+            registeredAt: new Date(chainSub.registeredAt * 1000),
+            expiresAt: new Date(chainSub.expiresAt * 1000),
+            metadata: chainSub.metadata,
+            transactionHash: subEvent.transactionHash,
+            blockNumber: subEvent.blockNumber,
+          });
+
+          const insertedSub = await db.insertSubdomainEvent(client, {
+            subdomainId: subdomain.id,
+            name: subEvent.name,
+            eventType: subEvent.eventType,
+            actorAddress: subEvent.actor,
+            transactionHash: subEvent.transactionHash,
+            blockNumber: subEvent.blockNumber,
+            logIndex: subEvent.logIndex,
+            details: subEvent.details,
+          });
+          if (insertedSub) processed += 1;
+          if (subEvent.actor) await db.ensureUser(client, subEvent.actor);
+          continue;
+        }
+
         const event = decodeZoneLog(rawLog);
         if (!event) {
           skipped += 1;

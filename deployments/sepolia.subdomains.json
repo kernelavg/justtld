@@ -1,0 +1,12 @@
+{
+  "contract": "JustTLDSubdomains",
+  "address": "0xa6565Dc205b2Af794ff4582dB1A6438CDF922c35",
+  "registry": "0x040e0F550dE73Aa796131A3C503B0189303CB298",
+  "chainId": 11155111,
+  "deployBlock": 12179323,
+  "deployedAt": "2026-11-21T03:29:01.845Z",
+  "deployer": "0x2ba51777889785cC53871463Bf8e4db95Fc8d886",
+  "owner": "0x2ba51777889785cC53871463Bf8e4db95Fc8d886",
+  "runtimeBytes": 9376,
+  "abiHash": "f7fc6107ad24dfd3"
+}

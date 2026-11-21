@@ -1,6 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export type SubdomainsDeployment = {
+  contract: string;
+  address: `0x${string}`;
+  registry: `0x${string}`;
+  chainId: number;
+  deployBlock: number;
+  deployedAt?: string;
+  deployer?: string;
+  owner?: string;
+  runtimeBytes?: number;
+  abiHash?: string;
+};
+
 export type Deployment = {
   contract: string;
   address: `0x${string}`;
@@ -105,4 +118,68 @@ export function tryReadDeployment(): Deployment | null {
   } catch {
     return null;
   }
+}
+
+/** Файл деплоя контракта поддоменов для той же сети, что и реестр. */
+export function findSubdomainsDeploymentFile(
+  startDir = process.cwd(),
+  maxDepth = 6,
+): string | null {
+  const explicit = process.env.SUBDOMAINS_DEPLOYMENT_FILE?.trim();
+  if (explicit) {
+    const absolute = path.isAbsolute(explicit) ? explicit : path.resolve(startDir, explicit);
+    if (fs.existsSync(absolute)) return absolute;
+  }
+  const dir = findDeploymentsDir(startDir, maxDepth);
+  if (!dir) return null;
+
+  const files = fs.readdirSync(dir).filter((name) => name.endsWith('.subdomains.json'));
+  if (files.length === 0) return null;
+
+  const wantedNetwork = process.env.DEPLOYMENT_NETWORK?.trim();
+  if (wantedNetwork) {
+    const candidate = path.join(dir, `${wantedNetwork}.subdomains.json`);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  const wantedChain = Number(process.env.CHAIN_ID);
+  if (Number.isFinite(wantedChain) && wantedChain > 0) {
+    for (const name of files) {
+      const file = path.join(dir, name);
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as SubdomainsDeployment;
+        if (parsed.chainId === wantedChain) return file;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return path.join(dir, files[0] as string);
+}
+
+/** Мягкое чтение: env SUBDOMAINS_ADDRESS важнее файла (удобно для Render). */
+export function tryReadSubdomainsDeployment(
+  startDir = process.cwd(),
+  maxDepth = 6,
+): SubdomainsDeployment | null {
+  const fromEnv = process.env.SUBDOMAINS_ADDRESS?.trim();
+  const file = findSubdomainsDeploymentFile(startDir, maxDepth);
+  let parsed: SubdomainsDeployment | null = null;
+  if (file) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as SubdomainsDeployment;
+      if (raw.address && /^0x[0-9a-fA-F]{40}$/.test(raw.address)) parsed = raw;
+    } catch {
+      parsed = null;
+    }
+  }
+  if (fromEnv && /^0x[0-9a-fA-F]{40}$/.test(fromEnv)) {
+    return {
+      contract: 'JustTLDSubdomains',
+      address: fromEnv as `0x${string}`,
+      registry: (parsed?.registry ?? process.env.REGISTRY_ADDRESS ?? '0x') as `0x${string}`,
+      chainId: parsed?.chainId ?? Number(process.env.CHAIN_ID ?? 31337),
+      deployBlock: parsed?.deployBlock ?? 0,
+    };
+  }
+  return parsed;
 }

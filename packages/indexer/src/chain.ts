@@ -1,5 +1,6 @@
 import { createPublicClient, http, type PublicClient } from 'viem';
 import { REGISTRY_ABI } from '@justtld/shared/generated/registry';
+import { SUBDOMAINS_ABI } from '@justtld/shared/generated/subdomains';
 import type { ZoneStatus } from '@justtld/shared';
 
 export type ChainClient = PublicClient;
@@ -71,6 +72,55 @@ export async function readZone(
     };
     return {
       owner: result.owner,
+      registeredAt: Number(result.registeredAt),
+      expiresAt: Number(result.expiresAt),
+      updatedAt: Number(result.updatedAt),
+      blocked: result.blocked,
+      metadata: result.metadata,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type ChainSubdomain = {
+  owner: `0x${string}`;
+  zoneOwner: `0x${string}`;
+  registeredAt: number;
+  expiresAt: number;
+  updatedAt: number;
+  blocked: boolean;
+  metadata: string;
+};
+
+/**
+ * Читает поддомен из контракта поддоменов.
+ * null — записи нет (или контракт ещё не знает такую метку).
+ */
+export async function readSubdomain(
+  client: ChainClient,
+  address: `0x${string}`,
+  tld: string,
+  label: string,
+): Promise<ChainSubdomain | null> {
+  try {
+    const result = (await client.readContract({
+      address,
+      abi: SUBDOMAINS_ABI,
+      functionName: 'getSubdomain',
+      args: [tld, label],
+    })) as unknown as {
+      owner: `0x${string}`;
+      zoneOwner: `0x${string}`;
+      registeredAt: bigint;
+      expiresAt: bigint;
+      updatedAt: bigint;
+      blocked: boolean;
+      metadata: string;
+    };
+    return {
+      owner: result.owner,
+      zoneOwner: result.zoneOwner,
       registeredAt: Number(result.registeredAt),
       expiresAt: Number(result.expiresAt),
       updatedAt: Number(result.updatedAt),

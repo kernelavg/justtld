@@ -3,6 +3,9 @@ import type {
   AdminAuditEntry,
   Paginated,
   StatsDto,
+  SubdomainDto,
+  SubdomainEventDto,
+  SubdomainEventType,
   TransferRequestDto,
   ZoneDto,
   ZoneEventDto,
@@ -117,6 +120,66 @@ const toAuditDto = (row: AuditRow): AdminAuditEntry => ({
 
 const ZONE_COLUMNS = `id, tld, owner_address, status, registered_at, expires_at, metadata,
   transaction_hash, block_number, created_at, updated_at`;
+
+type SubdomainRow = {
+  id: string;
+  name: string;
+  tld: string;
+  label: string;
+  owner_address: string;
+  zone_owner_address: string;
+  status: ZoneStatus;
+  registered_at: Date;
+  expires_at: Date;
+  metadata: string;
+  transaction_hash: string;
+  block_number: string | number;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type SubdomainEventRow = {
+  id: string;
+  subdomain_id: string;
+  name: string;
+  event_type: SubdomainEventType;
+  actor_address: string;
+  transaction_hash: string;
+  block_number: string | number;
+  log_index: number;
+  details: Record<string, unknown>;
+  created_at: Date;
+};
+
+const SUBDOMAIN_COLUMNS = `id, name, tld, label, owner_address, zone_owner_address, status,
+  registered_at, expires_at, metadata, transaction_hash, block_number, created_at, updated_at`;
+
+const toSubdomainDto = (row: SubdomainRow): SubdomainDto => ({
+  id: row.id,
+  name: row.name,
+  tld: row.tld,
+  label: row.label,
+  ownerAddress: row.owner_address,
+  zoneOwnerAddress: row.zone_owner_address,
+  status: row.status,
+  registeredAt: row.registered_at.toISOString(),
+  expiresAt: row.expires_at.toISOString(),
+  updatedAt: row.updated_at.toISOString(),
+  metadata: row.metadata,
+  transactionHash: row.transaction_hash,
+  blockNumber: Number(row.block_number),
+});
+
+const toSubdomainEventDto = (row: SubdomainEventRow): SubdomainEventDto => ({
+  id: row.id,
+  name: row.name,
+  eventType: row.event_type,
+  actorAddress: row.actor_address,
+  transactionHash: row.transaction_hash,
+  blockNumber: Number(row.block_number),
+  details: row.details ?? {},
+  createdAt: row.created_at.toISOString(),
+});
 
 /* ------------------------------------------------------------------ */
 /*                               users                                */
@@ -668,9 +731,208 @@ export async function countProcessedLogs(): Promise<number> {
 /** Полная очистка индексных данных (для resync с нуля). */
 export async function purgeIndexedData(client: PoolClient): Promise<void> {
   await client.query(
-    'TRUNCATE zone_events, transfer_requests, zones, processed_logs RESTART IDENTITY CASCADE',
+    'TRUNCATE subdomain_events, subdomains, zone_events, transfer_requests, zones, processed_logs RESTART IDENTITY CASCADE',
   );
   await client.query('DELETE FROM indexer_checkpoints');
+}
+
+/* ------------------------------------------------------------------ */
+/*                              поддомены                              */
+/* ------------------------------------------------------------------ */
+
+export type SubdomainSnapshot = {
+  name: string;
+  tld: string;
+  label: string;
+  ownerAddress: string;
+  zoneOwnerAddress: string;
+  status: ZoneStatus;
+  registeredAt: Date;
+  expiresAt: Date;
+  metadata: string;
+  transactionHash: string;
+  blockNumber: number;
+};
+
+/** Вставляет/обновляет поддомен по состоянию контракта. */
+export async function upsertSubdomainSnapshot(
+  client: PoolClient,
+  snapshot: SubdomainSnapshot,
+): Promise<SubdomainDto> {
+  const { rows } = await client.query<SubdomainRow>(
+    `INSERT INTO subdomains (name, tld, label, owner_address, zone_owner_address, status,
+                             registered_at, expires_at, metadata, transaction_hash, block_number)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     ON CONFLICT (name) DO UPDATE SET
+       owner_address = EXCLUDED.owner_address,
+       zone_owner_address = EXCLUDED.zone_owner_address,
+       status = EXCLUDED.status,
+       registered_at = EXCLUDED.registered_at,
+       expires_at = EXCLUDED.expires_at,
+       metadata = EXCLUDED.metadata,
+       transaction_hash = CASE
+         WHEN subdomains.block_number <= EXCLUDED.block_number THEN EXCLUDED.transaction_hash
+         ELSE subdomains.transaction_hash END,
+       block_number = GREATEST(subdomains.block_number, EXCLUDED.block_number),
+       updated_at = now()
+     RETURNING ${SUBDOMAIN_COLUMNS}`,
+    [
+      snapshot.name.toLowerCase(),
+      snapshot.tld.toLowerCase(),
+      snapshot.label.toLowerCase(),
+      snapshot.ownerAddress.toLowerCase(),
+      snapshot.zoneOwnerAddress.toLowerCase(),
+      snapshot.status,
+      snapshot.registeredAt,
+      snapshot.expiresAt,
+      snapshot.metadata,
+      snapshot.transactionHash,
+      snapshot.blockNumber,
+    ],
+  );
+  const row = rows[0];
+  if (!row) throw new Error('upsertSubdomainSnapshot: пустой RETURNING');
+  return toSubdomainDto(row);
+}
+
+export async function insertSubdomainEvent(
+  client: PoolClient,
+  event: {
+    subdomainId: string;
+    name: string;
+    eventType: SubdomainEventType;
+    actorAddress: string;
+    transactionHash: string;
+    blockNumber: number;
+    logIndex: number;
+    details?: Record<string, unknown>;
+  },
+): Promise<boolean> {
+  const { rowCount } = await client.query(
+    `INSERT INTO subdomain_events (subdomain_id, name, event_type, actor_address, transaction_hash,
+                                   block_number, log_index, details)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (transaction_hash, log_index) DO NOTHING`,
+    [
+      event.subdomainId,
+      event.name.toLowerCase(),
+      event.eventType,
+      event.actorAddress.toLowerCase(),
+      event.transactionHash,
+      event.blockNumber,
+      event.logIndex,
+      JSON.stringify(event.details ?? {}),
+    ],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+export async function getSubdomainByName(name: string): Promise<SubdomainDto | null> {
+  const row = await queryOne<SubdomainRow>(
+    `SELECT ${SUBDOMAIN_COLUMNS} FROM subdomains WHERE name = $1`,
+    [name.toLowerCase()],
+  );
+  return row ? toSubdomainDto(row) : null;
+}
+
+export async function listSubdomainsByZone(
+  tld: string,
+  params: { page: number; limit: number } = { page: 1, limit: 50 },
+): Promise<Paginated<SubdomainDto>> {
+  const offset = (params.page - 1) * params.limit;
+  const totalRow = await queryOne<{ count: string }>(
+    'SELECT count(*)::text AS count FROM subdomains WHERE tld = $1',
+    [tld.toLowerCase()],
+  );
+  const rows = await queryRows<SubdomainRow>(
+    `SELECT ${SUBDOMAIN_COLUMNS} FROM subdomains WHERE tld = $1
+     ORDER BY registered_at DESC, name ASC LIMIT $2 OFFSET $3`,
+    [tld.toLowerCase(), params.limit, offset],
+  );
+  const total = Number(totalRow?.count ?? 0);
+  return {
+    items: rows.map(toSubdomainDto),
+    page: params.page,
+    limit: params.limit,
+    total,
+    pages: Math.max(1, Math.ceil(total / params.limit)),
+  };
+}
+
+export async function listSubdomainsByOwner(
+  owner: string,
+  params: { page: number; limit: number } = { page: 1, limit: 50 },
+): Promise<Paginated<SubdomainDto>> {
+  const offset = (params.page - 1) * params.limit;
+  const totalRow = await queryOne<{ count: string }>(
+    'SELECT count(*)::text AS count FROM subdomains WHERE owner_address = $1',
+    [owner.toLowerCase()],
+  );
+  const rows = await queryRows<SubdomainRow>(
+    `SELECT ${SUBDOMAIN_COLUMNS} FROM subdomains WHERE owner_address = $1
+     ORDER BY registered_at DESC, name ASC LIMIT $2 OFFSET $3`,
+    [owner.toLowerCase(), params.limit, offset],
+  );
+  const total = Number(totalRow?.count ?? 0);
+  return {
+    items: rows.map(toSubdomainDto),
+    page: params.page,
+    limit: params.limit,
+    total,
+    pages: Math.max(1, Math.ceil(total / params.limit)),
+  };
+}
+
+export async function listSubdomainEvents(
+  name: string,
+  params: { page: number; limit: number } = { page: 1, limit: 50 },
+): Promise<Paginated<SubdomainEventDto>> {
+  const offset = (params.page - 1) * params.limit;
+  const totalRow = await queryOne<{ count: string }>(
+    'SELECT count(*)::text AS count FROM subdomain_events WHERE name = $1',
+    [name.toLowerCase()],
+  );
+  const rows = await queryRows<SubdomainEventRow>(
+    `SELECT id, subdomain_id, name, event_type, actor_address, transaction_hash, block_number,
+            log_index, details, created_at
+     FROM subdomain_events WHERE name = $1
+     ORDER BY created_at DESC, block_number DESC LIMIT $2 OFFSET $3`,
+    [name.toLowerCase(), params.limit, offset],
+  );
+  const total = Number(totalRow?.count ?? 0);
+  return {
+    items: rows.map(toSubdomainEventDto),
+    page: params.page,
+    limit: params.limit,
+    total,
+    pages: Math.max(1, Math.ceil(total / params.limit)),
+  };
+}
+
+/** Пересчитывает статусы истёкших поддоменов (по сроку). */
+export async function refreshExpiredSubdomainStatuses(): Promise<number> {
+  const expired = await queryRows<{ count: string }>(
+    `WITH updated AS (
+       UPDATE subdomains SET status = 'expired', updated_at = now()
+       WHERE status = 'active' AND expires_at <= now()
+       RETURNING 1
+     )
+     SELECT count(*)::text AS count FROM updated`,
+  );
+  const revived = await queryRows<{ count: string }>(
+    `WITH updated AS (
+       UPDATE subdomains SET status = 'active', updated_at = now()
+       WHERE status = 'expired' AND expires_at > now()
+       RETURNING 1
+     )
+     SELECT count(*)::text AS count FROM updated`,
+  );
+  return Number(expired[0]?.count ?? 0) + Number(revived[0]?.count ?? 0);
+}
+
+export async function countSubdomains(): Promise<number> {
+  const row = await queryOne<{ count: string }>('SELECT count(*)::text AS count FROM subdomains');
+  return Number(row?.count ?? 0);
 }
 
 /* ------------------------------------------------------------------ */

@@ -3,6 +3,7 @@
 import type {
   Paginated,
   StatsDto,
+  SubdomainDto,
   TransferRequestDto,
   UnsignedTx,
   ZoneDto,
@@ -183,6 +184,42 @@ export const prepareRenewal = (payload: { tld: string; sender: string }) =>
 
 export const prepareMetadata = (payload: { tld: string; metadata: string; sender: string }) =>
   postJson<PreparedTx>('/api/zones/prepare-metadata', payload);
+
+/* ─────────────────────────── поддомены ─────────────────────────── */
+
+export const fetchZoneSubdomains = (tld: string, page = 1, limit = 50) =>
+  apiFetch<Paginated<SubdomainDto> & { tld: string; zoneOwner: string | null }>(
+    `/api/zones/${encodeURIComponent(tld)}/subdomains?page=${page}&limit=${limit}`,
+  );
+
+export const fetchSubdomain = (tld: string, label: string) =>
+  apiFetch<{ subdomain: SubdomainDto | null; chain: SubdomainDto | null; events: unknown[] }>(
+    `/api/zones/${encodeURIComponent(tld)}/subdomains/${encodeURIComponent(label)}`,
+  );
+
+export const prepareSubdomainRegistration = (payload: {
+  tld: string;
+  label: string;
+  metadata?: string;
+  sender: string;
+}) => postJson<PreparedTx & { name: string }>('/api/subdomains/prepare-registration', payload);
+
+export const prepareSubdomainRenewal = (payload: { tld: string; label: string; sender: string }) =>
+  postJson<PreparedTx>('/api/subdomains/prepare-renewal', payload);
+
+export const prepareSubdomainTransfer = (payload: {
+  tld: string;
+  label: string;
+  to: string;
+  sender: string;
+}) => postJson<PreparedTx>('/api/subdomains/prepare-transfer', payload);
+
+export const prepareSubdomainMetadata = (payload: {
+  tld: string;
+  label: string;
+  metadata: string;
+  sender: string;
+}) => postJson<PreparedTx>('/api/subdomains/prepare-metadata', payload);
 
 export type ConfirmResponse = {
   status: 'pending' | 'confirmed' | 'failed';

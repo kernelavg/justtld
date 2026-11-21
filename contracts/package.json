@@ -11,6 +11,9 @@
     "seed": "hardhat run scripts/seed.ts --network localhost",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network mainnet",
+    "deploy:subdomains:localhost": "hardhat run scripts/deploy-subdomains.ts --network localhost",
+    "deploy:subdomains:sepolia": "hardhat run scripts/deploy-subdomains.ts --network sepolia",
+    "deploy:subdomains:mainnet": "hardhat run scripts/deploy-subdomains.ts --network mainnet",
     "verify:sepolia": "hardhat verify --network sepolia",
     "verify:mainnet": "hardhat verify --network mainnet"
   },

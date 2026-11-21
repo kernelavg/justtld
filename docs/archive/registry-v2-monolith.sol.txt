@@ -1,0 +1,1207 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+/**
+ * @title JustTLDRegistry
+ * @author JustTLD
+ * @notice Децентрализованный реестр пользовательских TLD-зон (например `.myzone`, `.web3`, `.cool`).
+ *
+ * @dev Модель владения:
+ *      - зона регистрируется на адрес отправителя транзакции (`msg.sender`) и становится его собственностью;
+ *      - повторная регистрация существующей зоны запрещена (кроме reclaim истёкшей зоны, см. {allowReclaim});
+ *      - передача, продление и изменение метаданных доступны только текущему владельцу зоны;
+ *      - заблокированную зону нельзя передать, продлить или изменить;
+ *      - owner контракта может блокировать/разблокировать зоны и приостанавливать мутации (Pausable).
+ *
+ *      Контракт не хранит и не переводит средства: единственная стоимость операций — gas.
+ */
+contract JustTLDRegistry is Ownable, Pausable, ReentrancyGuard {
+    /// @notice Структура зоны, хранимая в реестре.
+    /// @param owner Адрес текущего владельца зоны.
+    /// @param registeredAt Время первой регистрации (Unix timestamp, секунды).
+    /// @param expiresAt Время истечения текущего оплаченного срока.
+    /// @param updatedAt Время последней мутации зоны.
+    /// @param blocked Признак блокировки владельцем контракта.
+    /// @param metadata Произвольные метаданные (URI или JSON, до {MAX_METADATA_LENGTH} байт).
+    /// @param epoch Поколение зоны: увеличивается при перехвате истёкшей зоны. Поддомены
+    ///        предыдущего владельца привязаны к своему epoch и автоматически теряют силу.
+    struct Zone {
+        address owner;
+        uint64 registeredAt;
+        uint64 expiresAt;
+        uint64 updatedAt;
+        bool blocked;
+        string metadata;
+        uint32 epoch;
+    }
+
+    /// @notice Поддомен внутри зоны, например `blog.femboy` для зоны `.femboy`.
+    /// @param owner Адрес владельца поддомена.
+    /// @param zoneEpoch Поколение родительской зоны на момент регистрации.
+    /// @param registeredAt Время регистрации (Unix timestamp).
+    /// @param expiresAt Время истечения; никогда не позже срока родительской зоны.
+    /// @param updatedAt Время последней мутации.
+    /// @param blocked Признак блокировки владельцем контракта.
+    /// @param metadata Произвольные метаданные (до {MAX_METADATA_LENGTH} байт).
+    struct Subdomain {
+        address owner;
+        uint32 zoneEpoch;
+        uint64 registeredAt;
+        uint64 expiresAt;
+        uint64 updatedAt;
+        bool blocked;
+        string metadata;
+    }
+
+    /// @notice Срок, который добавляется при регистрации и при каждом продлении (365 дней).
+    uint64 public constant REGISTRATION_PERIOD = 365 days;
+
+    /// @notice Грейс-период после истечения, в течение которого зона не может быть перехвачена.
+    uint64 public constant GRACE_PERIOD = 30 days;
+
+    /// @notice Минимальная длина зоны вместе с точкой (".ab" — 3 символа).
+    uint256 public constant MIN_TLD_LENGTH = 3;
+
+    /// @notice Максимальная длина зоны вместе с точкой (".abcdefghijklmnopqrstu" — 22 символа).
+    uint256 public constant MAX_TLD_LENGTH = 21;
+
+    /// @notice Максимальная длина метаданных в байтах.
+    uint256 public constant MAX_METADATA_LENGTH = 512;
+
+    /// @notice Максимальная длина причины блокировки в байтах.
+    uint256 public constant MAX_REASON_LENGTH = 256;
+
+    /// @notice Минимальная длина метки поддомена (без точки и без зоны).
+    uint256 public constant MIN_LABEL_LENGTH = 1;
+
+    /// @notice Максимальная длина метки поддомена (без точки и без зоны).
+    uint256 public constant MAX_LABEL_LENGTH = 32;
+
+    /// @notice Максимальная длина слова чёрного списка в байтах.
+    uint256 public constant MAX_BLACKLIST_WORD_LENGTH = 32;
+
+    /// @notice Разрешён ли перехват (reclaim) истёкших зон после грейс-периода.
+    bool public allowReclaim;
+
+    /// @dev tld => Zone. Ключ нормализован: lower-case и начинается с точки.
+    mapping(string => Zone) private _zones;
+
+    /// @dev tld => позиция в массиве {_allTlds} (1-based, 0 = отсутствует).
+    mapping(string => uint256) private _indexOf;
+
+    /// @dev Полный список зарегистрированных зон (для пагинации и totalZones()).
+    string[] private _allTlds;
+
+    /// @dev tld => зарезервирована (настраиваемый список).
+    mapping(string => bool) private _reserved;
+
+    /// @dev слово чёрного списка (lower-case) => запрещено.
+    mapping(string => bool) private _blacklist;
+
+    /// @dev Дополнительные зарезервированные зоны (настраиваемые), для UI/аудита.
+    string[] private _reservedList;
+
+    /// @dev Слова чёрного списка (настраиваемые), для UI/аудита.
+    string[] private _blacklistList;
+
+    /// @dev полное имя поддомена ("blog.femboy") => Subdomain.
+    mapping(string => Subdomain) private _subdomains;
+
+    /// @dev ключ зоны (".femboy") => полные имена её поддоменов.
+    mapping(string => string[]) private _zoneSubdomains;
+
+    /// @dev Все когда-либо зарегистрированные поддомены (для пагинации и подсчётов).
+    string[] private _allSubdomains;
+
+    /// @dev полное имя => позиция в _allSubdomains (1-based, 0 = отсутствует).
+    mapping(string => uint256) private _subdomainIndexOf;
+
+    /* ------------------------------------------------------------------ */
+    /*                              EVENTS                                */
+    /* ------------------------------------------------------------------ */
+
+    /// @notice Зона зарегистрирована (или перехвачена после истечения).
+    event TLDRegistered(
+        string tld,
+        address indexed owner,
+        uint64 expiresAt,
+        string metadata,
+        uint64 timestamp
+    );
+
+    /// @notice Зона передана другому владельцу.
+    event TLDTransferred(string tld, address indexed from, address indexed to, uint64 timestamp);
+
+    /// @notice Срок действия зоны продлён.
+    event TLDRenewed(string tld, address indexed owner, uint64 newExpiresAt, uint64 timestamp);
+
+    /// @notice Метаданные зоны обновлены.
+    event TLDMetadataUpdated(string tld, address indexed owner, string metadata, uint64 timestamp);
+
+    /// @notice Зона заблокирована владельцем контракта.
+    event TLDBlocked(string tld, string reason, address indexed by, uint64 timestamp);
+
+    /// @notice Зона разблокирована владельцем контракта.
+    event TLDUnblocked(string tld, address by, uint64 timestamp);
+
+    /// @notice Зона добавлена в настраиваемый список зарезервированных.
+    event ReservedTLDAdded(string tld, uint64 timestamp);
+
+    /// @notice Зона удалена из настраиваемого списка зарезервированных.
+    event ReservedTLDRemoved(string tld, uint64 timestamp);
+
+    /// @notice Слово добавлено в чёрный список.
+    event BlacklistWordAdded(string word, uint64 timestamp);
+
+    /// @notice Слово удалено из чёрного списка.
+    event BlacklistWordRemoved(string word, uint64 timestamp);
+
+    /// @notice Изменён режим перехвата истёкших зон.
+    event AllowReclaimUpdated(bool allow, uint64 timestamp);
+
+    /// @notice Поддомен зарегистрирован.
+    event SubdomainRegistered(
+        string name,
+        string zone,
+        address indexed owner,
+        uint64 expiresAt,
+        string metadata,
+        uint64 timestamp
+    );
+
+    /// @notice Поддомен передан другому владельцу.
+    event SubdomainTransferred(string name, address indexed from, address indexed to, uint64 timestamp);
+
+    /// @notice Срок поддомена продлён.
+    event SubdomainRenewed(string name, address indexed owner, uint64 newExpiresAt, uint64 timestamp);
+
+    /// @notice Метаданные поддомена обновлены.
+    event SubdomainMetadataUpdated(
+        string name,
+        address indexed owner,
+        string metadata,
+        uint64 timestamp
+    );
+
+    /// @notice Поддомен заблокирован владельцем контракта.
+    event SubdomainBlocked(string name, string reason, address indexed by, uint64 timestamp);
+
+    /// @notice Поддомен разблокирован.
+    event SubdomainUnblocked(string name, address by, uint64 timestamp);
+
+    /* ------------------------------------------------------------------ */
+    /*                            CUSTOM ERRORS                           */
+    /* ------------------------------------------------------------------ */
+
+    /// @notice Нарушен формат зоны или иная проверка валидации.
+    error InvalidTLD(string reason);
+
+    /// @notice Зона уже зарегистрирована (повторная регистрация запрещена).
+    error TLDAlreadyExists(string tld);
+
+    /// @notice Зона не найдена в реестре.
+    error TLDNotFound(string tld);
+
+    /// @notice Отправитель не является владельцем зоны.
+    error NotTLDOwner(string tld, address caller);
+
+    /// @notice Зона заблокирована: передача/продление/изменение запрещены.
+    error TLDIsBlocked(string tld);
+
+    /// @notice Зона находится во встроенном или настраиваемом списке резервов.
+    error TLDReserved(string tld);
+
+    /// @notice Зона содержит запрещённое слово.
+    error TLDBlacklisted(string tld);
+
+    /// @notice Передан нулевой адрес.
+    error ZeroAddress();
+
+    /// @notice Новый владелец совпадает с текущим.
+    error InvalidNewOwner(address newOwner);
+
+    /// @notice Метаданные длиннее допустимого предела.
+    error MetadataTooLong(uint256 length, uint256 max);
+
+    /// @notice Причина блокировки пустая или слишком длинная.
+    error InvalidReason();
+
+    /// @notice Зона не заблокирована (для unblockTLD).
+    error TLDNotBlocked(string tld);
+
+    /// @notice Поддомен не найден (или потерял силу вместе с предыдущим поколением зоны).
+    error SubdomainNotFound(string name);
+
+    /// @notice Поддомен уже зарегистрирован в текущем поколении зоны.
+    error SubdomainAlreadyExists(string name);
+
+    /// @notice Поддомен заблокирован: передача/продление/изменение запрещены.
+    error SubdomainIsBlocked(string name);
+
+    /// @notice Отправитель не является ни владельцем поддомена, ни владельцем зоны.
+    error NotSubdomainOwner(string name, address caller);
+
+    /// @notice Неверный формат метки поддомена.
+    error InvalidLabel(string reason);
+
+    /// @notice Поддомен не может жить дольше своей зоны.
+    error SubdomainBeyondZone(string name);
+
+    /// @notice Поддомен не заблокирован (для unblockSubdomain).
+    error SubdomainNotBlocked(string name);
+
+    /* ------------------------------------------------------------------ */
+    /*                            CONSTRUCTOR                             */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * @notice Разворачивает реестр.
+     * @param initialOwner Адрес owner контракта (администратор).
+     * @param allowReclaim_ Разрешить перехват истёкших зон после {GRACE_PERIOD}.
+     */
+    constructor(address initialOwner, bool allowReclaim_) Ownable(initialOwner) {
+        if (initialOwner == address(0)) revert ZeroAddress();
+        allowReclaim = allowReclaim_;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                          USER OPERATIONS                           */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * @notice Регистрирует новую зону на адрес отправителя.
+     * @dev Проверяет формат, резервы, чёрный список и отсутствие дубля.
+     *      Если зона существует, истекла и разрешён reclaim — она переходит отправителю.
+     * @param tld Зона в формате `.example` (регистр не важен, приводится к нижнему).
+     * @param metadata Метаданные зоны (до {MAX_METADATA_LENGTH} байт, может быть пустой строкой).
+     * @return key Нормализованный ключ зоны.
+     */
+    function registerTLD(
+        string calldata tld,
+        string calldata metadata
+    ) external whenNotPaused nonReentrant returns (string memory key) {
+        (key, ) = _validateAndNormalize(tld, true);
+        if (bytes(metadata).length > MAX_METADATA_LENGTH) {
+            revert MetadataTooLong(bytes(metadata).length, MAX_METADATA_LENGTH);
+        }
+
+        Zone storage zone = _zones[key];
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 newExpiresAt = nowTs + REGISTRATION_PERIOD;
+
+        if (zone.owner != address(0)) {
+            if (!_isReclaimable(zone, nowTs)) revert TLDAlreadyExists(key);
+            // Перехват истёкшей зоны: срок и владелец сбрасываются, история остаётся в событиях.
+            zone.owner = msg.sender;
+            zone.registeredAt = nowTs;
+            zone.expiresAt = newExpiresAt;
+            zone.updatedAt = nowTs;
+            zone.blocked = false;
+            zone.metadata = metadata;
+            // Новое поколение: поддомены прежнего владельца теряют силу.
+            zone.epoch += 1;
+        } else {
+            _zones[key] = Zone({
+                owner: msg.sender,
+                registeredAt: nowTs,
+                expiresAt: newExpiresAt,
+                updatedAt: nowTs,
+                blocked: false,
+                metadata: metadata,
+                epoch: 0
+            });
+            _allTlds.push(key);
+            _indexOf[key] = _allTlds.length;
+        }
+
+        emit TLDRegistered(key, msg.sender, newExpiresAt, metadata, nowTs);
+    }
+
+    /**
+     * @notice Передаёт зону новому владельцу.
+     * @dev Только текущий владелец. Срок действия и дата регистрации сохраняются.
+     * @param tld Зона.
+     * @param newOwner Адрес нового владельца (не нулевой, не совпадает с текущим).
+     */
+    function transferTLD(string calldata tld, address newOwner) external whenNotPaused nonReentrant {
+        string memory key = _normalize(tld);
+        Zone storage zone = _requireZone(key);
+        if (zone.owner != msg.sender) revert NotTLDOwner(key, msg.sender);
+        if (zone.blocked) revert TLDIsBlocked(key);
+        if (newOwner == address(0)) revert ZeroAddress();
+        if (newOwner == zone.owner) revert InvalidNewOwner(newOwner);
+
+        address previousOwner = zone.owner;
+        zone.owner = newOwner;
+        zone.updatedAt = uint64(block.timestamp);
+
+        emit TLDTransferred(key, previousOwner, newOwner, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Продлевает зону на {REGISTRATION_PERIOD} (365 дней).
+     * @dev Только владелец. Если зона истекла, новый срок считается от текущего времени,
+     *      иначе — от текущей даты истечения (раннее продление не сгорает).
+     * @param tld Зона.
+     */
+    function renewTLD(string calldata tld) external whenNotPaused nonReentrant {
+        string memory key = _normalize(tld);
+        Zone storage zone = _requireZone(key);
+        if (zone.owner != msg.sender) revert NotTLDOwner(key, msg.sender);
+        if (zone.blocked) revert TLDIsBlocked(key);
+
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 base = zone.expiresAt > nowTs ? zone.expiresAt : nowTs;
+        uint64 newExpiresAt = base + REGISTRATION_PERIOD;
+        zone.expiresAt = newExpiresAt;
+        zone.updatedAt = nowTs;
+
+        emit TLDRenewed(key, msg.sender, newExpiresAt, nowTs);
+    }
+
+    /**
+     * @notice Обновляет метаданные зоны.
+     * @dev Только владелец, зона не должна быть заблокирована.
+     * @param tld Зона.
+     * @param metadata Новые метаданные (до {MAX_METADATA_LENGTH} байт).
+     */
+    function setTLDMetadata(
+        string calldata tld,
+        string calldata metadata
+    ) external whenNotPaused nonReentrant {
+        string memory key = _normalize(tld);
+        Zone storage zone = _requireZone(key);
+        if (zone.owner != msg.sender) revert NotTLDOwner(key, msg.sender);
+        if (zone.blocked) revert TLDIsBlocked(key);
+        if (bytes(metadata).length > MAX_METADATA_LENGTH) {
+            revert MetadataTooLong(bytes(metadata).length, MAX_METADATA_LENGTH);
+        }
+
+        zone.metadata = metadata;
+        zone.updatedAt = uint64(block.timestamp);
+
+        emit TLDMetadataUpdated(key, msg.sender, metadata, uint64(block.timestamp));
+    }
+
+
+    /**
+     * @notice Регистрирует поддомен внутри своей зоны, например `blog` в зоне `.femboy`.
+     * @dev Доступно владельцу зоны: он распоряжается своим пространством имён.
+     *      Срок поддомена не может выходить за срок родительской зоны.
+     * @param zone Зона в формате `.femboy`.
+     * @param label Метка поддомена без точки (1..{MAX_LABEL_LENGTH} символов).
+     * @param metadata Метаданные поддомена (до {MAX_METADATA_LENGTH} байт).
+     * @return name Полное имя поддомена в формате `blog.femboy`.
+     */
+    function registerSubdomain(
+        string calldata zone,
+        string calldata label,
+        string calldata metadata
+    ) external whenNotPaused nonReentrant returns (string memory name) {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        if (parent.owner != msg.sender) revert NotTLDOwner(zoneKey, msg.sender);
+        if (parent.blocked) revert TLDIsBlocked(zoneKey);
+        if (parent.expiresAt <= block.timestamp) revert InvalidTLD("ZONE_EXPIRED");
+        if (bytes(metadata).length > MAX_METADATA_LENGTH) {
+            revert MetadataTooLong(bytes(metadata).length, MAX_METADATA_LENGTH);
+        }
+
+        string memory normalizedLabel = _normalizeLabel(label);
+        name = _subdomainKey(normalizedLabel, zoneKey);
+
+        Subdomain storage sub = _subdomains[name];
+        uint32 epoch = parent.epoch;
+        if (_isSubdomainAlive(sub, epoch)) revert SubdomainAlreadyExists(name);
+        if (_isBlacklisted(name)) revert TLDBlacklisted(name);
+
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 expiresAt = nowTs + REGISTRATION_PERIOD;
+        if (expiresAt > parent.expiresAt) expiresAt = parent.expiresAt;
+
+        if (sub.owner == address(0) || sub.zoneEpoch != epoch) {
+            bool isNew = _subdomainIndexOf[name] == 0;
+            _subdomains[name] = Subdomain({
+                owner: msg.sender,
+                zoneEpoch: epoch,
+                registeredAt: nowTs,
+                expiresAt: expiresAt,
+                updatedAt: nowTs,
+                blocked: false,
+                metadata: metadata
+            });
+            if (isNew) {
+                _allSubdomains.push(name);
+                _subdomainIndexOf[name] = _allSubdomains.length;
+                _zoneSubdomains[zoneKey].push(name);
+            }
+        } else {
+            // Перерегистрация свободного (истёкшего) поддомена в том же поколении.
+            sub.owner = msg.sender;
+            sub.registeredAt = nowTs;
+            sub.expiresAt = expiresAt;
+            sub.updatedAt = nowTs;
+            sub.blocked = false;
+            sub.metadata = metadata;
+        }
+
+        emit SubdomainRegistered(name, zoneKey, msg.sender, expiresAt, metadata, nowTs);
+    }
+
+    /**
+     * @notice Продлевает поддомен на {REGISTRATION_PERIOD}, но не дольше срока зоны.
+     * @dev Доступно владельцу поддомена или владельцу зоны.
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     */
+    function renewSubdomain(string calldata zone, string calldata label) external whenNotPaused nonReentrant {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _requireSubdomain(name, parent.epoch);
+        _requireSubdomainRights(sub, parent, name);
+        if (sub.blocked) revert SubdomainIsBlocked(name);
+        if (parent.expiresAt <= block.timestamp) revert InvalidTLD("ZONE_EXPIRED");
+
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 base = sub.expiresAt > nowTs ? sub.expiresAt : nowTs;
+        uint64 newExpiresAt = base + REGISTRATION_PERIOD;
+        if (newExpiresAt > parent.expiresAt) newExpiresAt = parent.expiresAt;
+        if (newExpiresAt <= base) revert SubdomainBeyondZone(name);
+
+        sub.expiresAt = newExpiresAt;
+        sub.updatedAt = nowTs;
+
+        emit SubdomainRenewed(name, msg.sender, newExpiresAt, nowTs);
+    }
+
+    /**
+     * @notice Передаёт поддомен новому владельцу.
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     * @param newOwner Новый владелец (не нулевой, не совпадает с текущим).
+     */
+    function transferSubdomain(
+        string calldata zone,
+        string calldata label,
+        address newOwner
+    ) external whenNotPaused nonReentrant {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _requireSubdomain(name, parent.epoch);
+        _requireSubdomainRights(sub, parent, name);
+        if (sub.blocked) revert SubdomainIsBlocked(name);
+        if (newOwner == address(0)) revert ZeroAddress();
+        if (newOwner == sub.owner) revert InvalidNewOwner(newOwner);
+
+        address previousOwner = sub.owner;
+        sub.owner = newOwner;
+        sub.updatedAt = uint64(block.timestamp);
+
+        emit SubdomainTransferred(name, previousOwner, newOwner, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Обновляет метаданные поддомена.
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     * @param metadata Новые метаданные (до {MAX_METADATA_LENGTH} байт).
+     */
+    function setSubdomainMetadata(
+        string calldata zone,
+        string calldata label,
+        string calldata metadata
+    ) external whenNotPaused nonReentrant {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _requireSubdomain(name, parent.epoch);
+        _requireSubdomainRights(sub, parent, name);
+        if (sub.blocked) revert SubdomainIsBlocked(name);
+        if (bytes(metadata).length > MAX_METADATA_LENGTH) {
+            revert MetadataTooLong(bytes(metadata).length, MAX_METADATA_LENGTH);
+        }
+
+        sub.metadata = metadata;
+        sub.updatedAt = uint64(block.timestamp);
+
+        emit SubdomainMetadataUpdated(name, msg.sender, metadata, uint64(block.timestamp));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                         ADMIN OPERATIONS                           */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * @notice Блокирует зону. Заблокированную зону нельзя передать, продлить или изменить.
+     * @param tld Зона.
+     * @param reason Причина блокировки (1..{MAX_REASON_LENGTH} байт).
+     */
+    function blockTLD(string calldata tld, string calldata reason) external onlyOwner {
+        string memory key = _normalize(tld);
+        Zone storage zone = _requireZone(key);
+        if (zone.blocked) revert TLDIsBlocked(key);
+        uint256 reasonLength = bytes(reason).length;
+        if (reasonLength == 0 || reasonLength > MAX_REASON_LENGTH) revert InvalidReason();
+
+        zone.blocked = true;
+        zone.updatedAt = uint64(block.timestamp);
+
+        emit TLDBlocked(key, reason, msg.sender, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Разблокирует зону.
+     * @param tld Зона.
+     */
+    function unblockTLD(string calldata tld) external onlyOwner {
+        string memory key = _normalize(tld);
+        Zone storage zone = _requireZone(key);
+        if (!zone.blocked) revert TLDNotBlocked(key);
+
+        zone.blocked = false;
+        zone.updatedAt = uint64(block.timestamp);
+
+        emit TLDUnblocked(key, msg.sender, uint64(block.timestamp));
+    }
+
+
+    /**
+     * @notice Блокирует поддомен (например за фишинг).
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     * @param reason Причина блокировки (1..{MAX_REASON_LENGTH} байт).
+     */
+    function blockSubdomain(string calldata zone, string calldata label, string calldata reason) external onlyOwner {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _requireSubdomain(name, parent.epoch);
+        if (sub.blocked) revert SubdomainIsBlocked(name);
+        uint256 reasonLength = bytes(reason).length;
+        if (reasonLength == 0 || reasonLength > MAX_REASON_LENGTH) revert InvalidReason();
+
+        sub.blocked = true;
+        sub.updatedAt = uint64(block.timestamp);
+
+        emit SubdomainBlocked(name, reason, msg.sender, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Разблокирует поддомен.
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     */
+    function unblockSubdomain(string calldata zone, string calldata label) external onlyOwner {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZone(zoneKey);
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _requireSubdomain(name, parent.epoch);
+        if (!sub.blocked) revert SubdomainNotBlocked(name);
+
+        sub.blocked = false;
+        sub.updatedAt = uint64(block.timestamp);
+
+        emit SubdomainUnblocked(name, msg.sender, uint64(block.timestamp));
+    }
+
+    /// @notice Приостанавливает регистрацию/передачу/продление/изменение метаданных.
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    /// @notice Возобновляет мутации после паузы.
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    /**
+     * @notice Включает или выключает перехват истёкших зон после {GRACE_PERIOD}.
+     * @param allow Новое значение флага.
+     */
+    function setAllowReclaim(bool allow) external onlyOwner {
+        allowReclaim = allow;
+        emit AllowReclaimUpdated(allow, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Добавляет зону в настраиваемый список зарезервированных.
+     * @param tld Зона в формате `.example`.
+     */
+    function addReservedTLD(string calldata tld) external onlyOwner {
+        (string memory key, ) = _validateAndNormalize(tld, false);
+        if (_reserved[key]) revert TLDReserved(key);
+        _reserved[key] = true;
+        _reservedList.push(key);
+        emit ReservedTLDAdded(key, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Удаляет зону из настраиваемого списка зарезервированных.
+     * @param tld Зона в формате `.example`.
+     */
+    function removeReservedTLD(string calldata tld) external onlyOwner {
+        string memory key = _normalize(tld);
+        if (!_reserved[key]) revert TLDReserved(key);
+        _reserved[key] = false;
+        uint256 length = _reservedList.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (keccak256(bytes(_reservedList[i])) == keccak256(bytes(key))) {
+                _reservedList[i] = _reservedList[length - 1];
+                _reservedList.pop();
+                break;
+            }
+        }
+        emit ReservedTLDRemoved(key, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Добавляет слово в чёрный список (проверяется как подстрока зоны).
+     * @param word Слово в нижнем регистре, латиница/цифры/дефис (2..{MAX_BLACKLIST_WORD_LENGTH}).
+     */
+    function addBlacklistedWord(string calldata word) external onlyOwner {
+        string memory normalized = _normalizeWord(word);
+        if (_blacklist[normalized]) revert TLDBlacklisted(normalized);
+        _blacklist[normalized] = true;
+        _blacklistList.push(normalized);
+        emit BlacklistWordAdded(normalized, uint64(block.timestamp));
+    }
+
+    /**
+     * @notice Удаляет слово из чёрного списка.
+     * @param word Слово, ранее добавленное в чёрный список.
+     */
+    function removeBlacklistedWord(string calldata word) external onlyOwner {
+        string memory normalized = _normalizeWord(word);
+        if (!_blacklist[normalized]) revert TLDBlacklisted(normalized);
+        _blacklist[normalized] = false;
+        uint256 length = _blacklistList.length;
+        for (uint256 i = 0; i < length; i++) {
+            if (keccak256(bytes(_blacklistList[i])) == keccak256(bytes(normalized))) {
+                _blacklistList[i] = _blacklistList[length - 1];
+                _blacklistList.pop();
+                break;
+            }
+        }
+        emit BlacklistWordRemoved(normalized, uint64(block.timestamp));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                              VIEWS                                 */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * @notice Возвращает полную информацию о зоне.
+     * @param tld Зона.
+     * @return zone Структура зоны.
+     */
+    function getTLD(string calldata tld) external view returns (Zone memory zone) {
+        zone = _requireZoneView(_normalize(tld));
+    }
+
+    /**
+     * @notice Возвращает адрес владельца зоны.
+     * @param tld Зона.
+     */
+    function ownerOf(string calldata tld) external view returns (address) {
+        return _requireZoneView(_normalize(tld)).owner;
+    }
+
+    /// @notice Существует ли зона в реестре (true и для истёкших, и для заблокированных).
+    function exists(string calldata tld) public view returns (bool) {
+        return _zones[_normalize(tld)].owner != address(0);
+    }
+
+    /// @notice Общее количество когда-либо зарегистрированных зон.
+    function totalZones() external view returns (uint256) {
+        return _allTlds.length;
+    }
+
+    /// @notice Истёк ли срок действия зоны.
+    function isExpired(string calldata tld) public view returns (bool) {
+        Zone storage zone = _zones[_normalize(tld)];
+        return zone.owner != address(0) && zone.expiresAt <= block.timestamp;
+    }
+
+    /// @notice Заблокирована ли зона.
+    function isBlocked(string calldata tld) public view returns (bool) {
+        return _zones[_normalize(tld)].blocked;
+    }
+
+    /// @notice Можно ли перехватить истёкшую зону (reclaim) прямо сейчас.
+    function isReclaimable(string calldata tld) external view returns (bool) {
+        return _isReclaimable(_zones[_normalize(tld)], uint64(block.timestamp));
+    }
+
+    /// @notice Возвращает зоны владельца (для личного кабинета).
+    /// @param account Адрес владельца.
+    function tldsOfOwner(address account) external view returns (string[] memory result) {
+        uint256 length = _allTlds.length;
+        uint256 count;
+        for (uint256 i = 0; i < length; i++) {
+            if (_zones[_allTlds[i]].owner == account) count++;
+        }
+        result = new string[](count);
+        uint256 cursor;
+        for (uint256 i = 0; i < length; i++) {
+            string memory key = _allTlds[i];
+            if (_zones[key].owner == account) {
+                result[cursor] = key;
+                cursor++;
+            }
+        }
+    }
+
+    /// @notice Постраничный список всех зон.
+    /// @param offset Смещение (0-based).
+    /// @param limit Максимальное количество записей.
+    function allTLDs(uint256 offset, uint256 limit) external view returns (string[] memory page) {
+        uint256 length = _allTlds.length;
+        if (offset >= length || limit == 0) return new string[](0);
+        uint256 end = offset + limit;
+        if (end > length) end = length;
+        page = new string[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            page[i - offset] = _allTlds[i];
+        }
+    }
+
+    /// @notice Список настраиваемых зарезервированных зон.
+    function reservedTLDs() external view returns (string[] memory) {
+        return _reservedList;
+    }
+
+    /// @notice Список слов чёрного списка.
+    function blacklistedWords() external view returns (string[] memory) {
+        return _blacklistList;
+    }
+
+    /// @notice Встроенный список зарезервированных зон.
+    function builtinReservedTLDs() external pure returns (string[] memory) {
+        string[] memory list = new string[](10);
+        list[0] = ".eth";
+        list[1] = ".com";
+        list[2] = ".net";
+        list[3] = ".org";
+        list[4] = ".gov";
+        list[5] = ".edu";
+        list[6] = ".io";
+        list[7] = ".ai";
+        list[8] = ".sol";
+        list[9] = ".local";
+        return list;
+    }
+
+    /**
+     * @notice Возвращает поддомен по зоне и метке.
+     * @param zone Родительская зона (`.femboy`).
+     * @param label Метка поддомена (`blog`).
+     * @return sub Структура поддомена.
+     */
+    function getSubdomain(
+        string calldata zone,
+        string calldata label
+    ) external view returns (Subdomain memory sub) {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _requireZoneView(zoneKey);
+        sub = _requireSubdomainView(_subdomainKey(_normalizeLabel(label), zoneKey), parent.epoch);
+    }
+
+    /**
+     * @notice Фактический владелец поддомена, если он сейчас в силе.
+     * @dev Возвращает address(0) для несуществующих, истёкших, заблокированных поддоменов
+     *      и для поддоменов предыдущего поколения зоны.
+     */
+    function subdomainOwner(string calldata zone, string calldata label) external view returns (address) {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _zones[zoneKey];
+        if (parent.owner == address(0) || parent.blocked || parent.expiresAt <= block.timestamp) {
+            return address(0);
+        }
+        Subdomain storage sub = _subdomains[_subdomainKey(_normalizeLabel(label), zoneKey)];
+        if (!_isSubdomainAlive(sub, parent.epoch)) return address(0);
+        return sub.owner;
+    }
+
+    /// @notice Существует ли запись поддомена (в том числе истёкшая или чужая по поколению).
+    function subdomainExists(string calldata zone, string calldata label) public view returns (bool) {
+        return _subdomains[_subdomainKey(_normalizeLabel(label), _normalize(zone))].owner != address(0);
+    }
+
+    /// @notice Заблокирован ли поддомен владельцем контракта.
+    function isSubdomainBlocked(string calldata zone, string calldata label) external view returns (bool) {
+        return _subdomains[_subdomainKey(_normalizeLabel(label), _normalize(zone))].blocked;
+    }
+
+    /// @notice Истёк ли срок поддомена (или его зоны).
+    function isSubdomainExpired(string calldata zone, string calldata label) external view returns (bool) {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _zones[zoneKey];
+        if (parent.owner == address(0)) return true;
+        Subdomain storage sub = _subdomains[_subdomainKey(_normalizeLabel(label), zoneKey)];
+        if (sub.owner == address(0)) return true;
+        return sub.zoneEpoch != parent.epoch || sub.expiresAt <= block.timestamp;
+    }
+
+    /// @notice Полные имена поддоменов зоны (`blog.femboy`).
+    function subdomainsOfZone(string calldata zone) external view returns (string[] memory) {
+        return _zoneSubdomains[_normalize(zone)];
+    }
+
+    /// @notice Полные имена всех поддоменов, которыми владеет адрес.
+    function subdomainsOfOwner(address account) external view returns (string[] memory result) {
+        uint256 length = _allSubdomains.length;
+        uint256 count;
+        for (uint256 i = 0; i < length; i++) {
+            if (_subdomains[_allSubdomains[i]].owner == account) count++;
+        }
+        result = new string[](count);
+        uint256 cursor;
+        for (uint256 i = 0; i < length; i++) {
+            string memory name = _allSubdomains[i];
+            if (_subdomains[name].owner == account) {
+                result[cursor] = name;
+                cursor++;
+            }
+        }
+    }
+
+    /// @notice Общее количество когда-либо зарегистрированных поддоменов.
+    function totalSubdomains() external view returns (uint256) {
+        return _allSubdomains.length;
+    }
+
+    /// @notice Постраничный список всех поддоменов.
+    /// @param offset Смещение (0-based).
+    /// @param limit Максимальное количество записей.
+    function allSubdomains(uint256 offset, uint256 limit) external view returns (string[] memory page) {
+        uint256 length = _allSubdomains.length;
+        if (offset >= length || limit == 0) return new string[](0);
+        uint256 end = offset + limit;
+        if (end > length) end = length;
+        page = new string[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            page[i - offset] = _allSubdomains[i];
+        }
+    }
+
+    /**
+     * @notice Полная проверка возможности регистрации поддомена (для UI и API).
+     * @param zone Родительская зона.
+     * @param label Метка поддомена.
+     * @param account Кто собирается регистрировать (адрес кошелька из UI).
+     */
+    function checkSubdomainRegistration(
+        string calldata zone,
+        string calldata label,
+        address account
+    ) external view returns (bool ok, string memory reason) {
+        string memory zoneKey = _normalize(zone);
+        Zone storage parent = _zones[zoneKey];
+        if (parent.owner == address(0)) return (false, "ZONE_NOT_FOUND");
+        if (parent.blocked) return (false, "ZONE_BLOCKED");
+        if (parent.expiresAt <= block.timestamp) return (false, "ZONE_EXPIRED");
+        if (account != address(0) && parent.owner != account) return (false, "NOT_ZONE_OWNER");
+
+        (bool labelOk, string memory labelReason, ) = _tryNormalizeLabel(label);
+        if (!labelOk) return (false, labelReason);
+
+        string memory name = _subdomainKey(_normalizeLabel(label), zoneKey);
+        Subdomain storage sub = _subdomains[name];
+        if (_isSubdomainAlive(sub, parent.epoch)) return (false, "SUBDOMAIN_ALREADY_EXISTS");
+        if (_isBlacklisted(name)) return (false, "TLD_BLACKLISTED");
+        if (paused()) return (false, "CONTRACT_PAUSED");
+        return (true, "");
+    }
+
+    /// @notice Проверка только формата метки поддомена (pure).
+    function validateLabelFormat(string calldata label) external pure returns (bool ok, string memory reason) {
+        (bool labelOk, string memory labelReason, ) = _tryNormalizeLabel(label);
+        return (labelOk, labelReason);
+    }
+
+    /**
+     * @notice Полная проверка возможности регистрации (для UI и API).
+     * @param tld Предполагаемая зона.
+     * @return ok true, если зону можно зарегистрировать прямо сейчас.
+     * @return reason Причина отказа (пустая строка при ok).
+     */
+    function checkRegistration(string calldata tld) external view returns (bool ok, string memory reason) {
+        (bool formatOk, string memory formatReason, string memory key, ) = _tryNormalize(tld);
+        if (!formatOk) return (false, formatReason);
+        if (_isBuiltinReserved(key) || _reserved[key]) return (false, "TLD_RESERVED");
+        if (_isBlacklisted(key)) return (false, "TLD_BLACKLISTED");
+        Zone storage zone = _zones[key];
+        if (zone.owner != address(0) && !_isReclaimable(zone, uint64(block.timestamp))) {
+            return (false, "TLD_ALREADY_EXISTS");
+        }
+        if (paused()) return (false, "CONTRACT_PAUSED");
+        return (true, "");
+    }
+
+    /// @notice Проверка только формата зоны (pure, не зависит от состояния).
+    function validateFormat(string calldata tld) external pure returns (bool ok, string memory reason) {
+        (ok, reason, , ) = _tryNormalize(tld);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*                            INTERNALS                               */
+    /* ------------------------------------------------------------------ */
+
+    /// @dev Возвращает зону или реверсит TLDNotFound.
+    function _requireZone(string memory key) private view returns (Zone storage zone) {
+        zone = _zones[key];
+        if (zone.owner == address(0)) revert TLDNotFound(key);
+    }
+
+    /// @dev View-версия _requireZone (для внешних view-функций).
+    function _requireZoneView(string memory key) private view returns (Zone storage zone) {
+        zone = _zones[key];
+        if (zone.owner == address(0)) revert TLDNotFound(key);
+    }
+
+    /// @dev Проверяет зону целиком (формат + резервы + blacklist) и нормализует ключ.
+    function _validateAndNormalize(
+        string calldata tld,
+        bool checkLists
+    ) private view returns (string memory key, string memory label) {
+        (
+            bool ok,
+            string memory reason,
+            string memory normalized,
+            string memory normalizedLabel
+        ) = _tryNormalize(tld);
+        if (!ok) revert InvalidTLD(reason);
+        if (checkLists) {
+            if (_isBuiltinReserved(normalized) || _reserved[normalized]) revert TLDReserved(normalized);
+            if (_isBlacklisted(normalized)) revert TLDBlacklisted(normalized);
+        }
+        return (normalized, normalizedLabel);
+    }
+
+    /// @dev Нормализует зону без проверок списков; реверсит InvalidTLD при неверном формате.
+    function _normalize(string calldata tld) private pure returns (string memory) {
+        (bool ok, string memory reason, string memory normalized, ) = _tryNormalize(tld);
+        if (!ok) revert InvalidTLD(reason);
+        return normalized;
+    }
+
+    /**
+     * @dev Ядро валидации. Возвращает нормализованный ключ (lower-case, с точкой) и label без точки.
+     *      Правила: начинается с ".", длина 3..21, только [a-z0-9-] в label, без "--",
+     *      без дефиса по краям; верхний регистр приводится к нижнему.
+     */
+    function _tryNormalize(
+        string calldata tld
+    ) private pure returns (bool ok, string memory reason, string memory key, string memory label) {
+        bytes memory raw = bytes(tld);
+        uint256 length = raw.length;
+        if (length == 0) return (false, "TLD_EMPTY", "", "");
+        if (length < MIN_TLD_LENGTH || length > MAX_TLD_LENGTH) {
+            return (false, "TLD_LENGTH", "", "");
+        }
+        if (raw[0] != bytes1(".")) return (false, "TLD_MUST_START_WITH_DOT", "", "");
+
+        bytes memory normalized = new bytes(length);
+        normalized[0] = bytes1(".");
+        for (uint256 i = 1; i < length; i++) {
+            bytes1 char = raw[i];
+            if (char >= bytes1("A") && char <= bytes1("Z")) {
+                char = bytes1(uint8(char) + 32);
+            }
+            bool isLower = char >= bytes1("a") && char <= bytes1("z");
+            bool isDigit = char >= bytes1("0") && char <= bytes1("9");
+            bool isHyphen = char == bytes1("-");
+            if (!isLower && !isDigit && !isHyphen) return (false, "TLD_INVALID_CHARACTER", "", "");
+            normalized[i] = char;
+        }
+
+        if (normalized[1] == bytes1("-") || normalized[length - 1] == bytes1("-")) {
+            return (false, "TLD_HYPHEN_EDGE", "", "");
+        }
+        for (uint256 i = 1; i < length - 1; i++) {
+            if (normalized[i] == bytes1("-") && normalized[i + 1] == bytes1("-")) {
+                return (false, "TLD_DOUBLE_HYPHEN", "", "");
+            }
+        }
+
+        bytes memory labelBytes = new bytes(length - 1);
+        for (uint256 i = 1; i < length; i++) {
+            labelBytes[i - 1] = normalized[i];
+        }
+
+        return (true, "", string(normalized), string(labelBytes));
+    }
+
+
+    /**
+     * @dev Возвращает поддомен или реверсит SubdomainNotFound.
+     *      Блокировка здесь не проверяется: вызывающий код сам решает, какой ошибкой
+     *      ответить (`SubdomainIsBlocked` для мутаций, скрытие владельца для резолвера).
+     */
+    function _requireSubdomain(string memory name, uint32 epoch) private view returns (Subdomain storage sub) {
+        sub = _subdomains[name];
+        if (!_subdomainRecordValid(sub, epoch)) revert SubdomainNotFound(name);
+    }
+
+    /// @dev View-версия _requireSubdomain.
+    function _requireSubdomainView(
+        string memory name,
+        uint32 epoch
+    ) private view returns (Subdomain storage sub) {
+        sub = _subdomains[name];
+        if (!_subdomainRecordValid(sub, epoch)) revert SubdomainNotFound(name);
+    }
+
+    /// @dev Запись поддомена существует, относится к текущему поколению зоны и не истекла.
+    function _subdomainRecordValid(Subdomain storage sub, uint32 epoch) private view returns (bool) {
+        return sub.owner != address(0) && sub.zoneEpoch == epoch && sub.expiresAt > block.timestamp;
+    }
+
+    /// @dev Проверяет право на мутацию поддомена: владелец поддомена или владелец зоны.
+    function _requireSubdomainRights(
+        Subdomain storage sub,
+        Zone storage parent,
+        string memory name
+    ) private view {
+        if (msg.sender != sub.owner && msg.sender != parent.owner) {
+            revert NotSubdomainOwner(name, msg.sender);
+        }
+        if (parent.blocked) revert TLDIsBlocked(".zone");
+    }
+
+    /// @dev Поддомен существует, в силе и относится к текущему поколению зоны.
+    function _isSubdomainAlive(Subdomain storage sub, uint32 epoch) private view returns (bool) {
+        return
+            sub.owner != address(0) &&
+            sub.zoneEpoch == epoch &&
+            !sub.blocked &&
+            sub.expiresAt > block.timestamp;
+    }
+
+    /// @dev Полное имя поддомена: label + "." + label зоны (без ведущей точки).
+    function _subdomainKey(string memory label, string memory zoneKey) private pure returns (string memory) {
+        bytes memory zoneBytes = bytes(zoneKey);
+        // zoneKey всегда начинается с точки: ".femboy" → "femboy"
+        bytes memory zoneLabelBytes = new bytes(zoneBytes.length - 1);
+        for (uint256 i = 1; i < zoneBytes.length; i++) {
+            zoneLabelBytes[i - 1] = zoneBytes[i];
+        }
+        return string(abi.encodePacked(label, ".", string(zoneLabelBytes)));
+    }
+
+    /// @dev Нормализует метку поддомена (lower-case, [a-z0-9-], 1..32) или реверсит InvalidLabel.
+    function _normalizeLabel(string calldata label) private pure returns (string memory) {
+        (bool ok, string memory reason, string memory normalized) = _tryNormalizeLabel(label);
+        if (!ok) revert InvalidLabel(reason);
+        return normalized;
+    }
+
+    /// @dev Ядро валидации метки поддомена.
+    function _tryNormalizeLabel(
+        string calldata label
+    ) private pure returns (bool ok, string memory reason, string memory normalized) {
+        bytes memory raw = bytes(label);
+        uint256 length = raw.length;
+        if (length == 0) return (false, "LABEL_EMPTY", "");
+        if (length < MIN_LABEL_LENGTH || length > MAX_LABEL_LENGTH) return (false, "LABEL_LENGTH", "");
+        if (raw[0] == bytes1("-") || raw[length - 1] == bytes1("-")) return (false, "LABEL_HYPHEN_EDGE", "");
+
+        bytes memory buffer = new bytes(length);
+        for (uint256 i = 0; i < length; i++) {
+            bytes1 char = raw[i];
+            if (char >= bytes1("A") && char <= bytes1("Z")) {
+                char = bytes1(uint8(char) + 32);
+            }
+            bool isLower = char >= bytes1("a") && char <= bytes1("z");
+            bool isDigit = char >= bytes1("0") && char <= bytes1("9");
+            bool isHyphen = char == bytes1("-");
+            if (!isLower && !isDigit && !isHyphen) return (false, "LABEL_INVALID_CHARACTER", "");
+            buffer[i] = char;
+        }
+        for (uint256 i = 0; i < length - 1; i++) {
+            if (buffer[i] == bytes1("-") && buffer[i + 1] == bytes1("-")) {
+                return (false, "LABEL_DOUBLE_HYPHEN", "");
+            }
+        }
+        return (true, "", string(buffer));
+    }
+
+    /// @dev Нормализует слово чёрного списка (lower-case, [a-z0-9-], 2..32).
+    function _normalizeWord(string calldata word) private pure returns (string memory) {
+        bytes memory raw = bytes(word);
+        uint256 length = raw.length;
+        if (length < 2 || length > MAX_BLACKLIST_WORD_LENGTH) revert InvalidTLD("BLACKLIST_WORD_LENGTH");
+        bytes memory normalized = new bytes(length);
+        for (uint256 i = 0; i < length; i++) {
+            bytes1 char = raw[i];
+            if (char >= bytes1("A") && char <= bytes1("Z")) {
+                char = bytes1(uint8(char) + 32);
+            }
+            bool isLower = char >= bytes1("a") && char <= bytes1("z");
+            bool isDigit = char >= bytes1("0") && char <= bytes1("9");
+            bool isHyphen = char == bytes1("-");
+            if (!isLower && !isDigit && !isHyphen) revert InvalidTLD("INVALID_BLACKLIST_WORD");
+            normalized[i] = char;
+        }
+        return string(normalized);
+    }
+
+    /// @dev Встроенный список резервов (политика JustTLD).
+    function _isBuiltinReserved(string memory key) private pure returns (bool) {
+        bytes32 hash = keccak256(bytes(key));
+        return (hash == keccak256(".eth") ||
+            hash == keccak256(".com") ||
+            hash == keccak256(".net") ||
+            hash == keccak256(".org") ||
+            hash == keccak256(".gov") ||
+            hash == keccak256(".edu") ||
+            hash == keccak256(".io") ||
+            hash == keccak256(".ai") ||
+            hash == keccak256(".sol") ||
+            hash == keccak256(".local"));
+    }
+
+    /// @dev Проверяет label на наличие любого слова из чёрного списка (подстрока).
+    function _isBlacklisted(string memory key) private view returns (bool) {
+        uint256 wordsLength = _blacklistList.length;
+        if (wordsLength == 0) return false;
+        bytes memory keyBytes = bytes(key);
+        for (uint256 w = 0; w < wordsLength; w++) {
+            bytes memory word = bytes(_blacklistList[w]);
+            if (_contains(keyBytes, word)) return true;
+        }
+        return false;
+    }
+
+    /// @dev Проверяет, можно ли перехватить истёкшую зону.
+    function _isReclaimable(Zone storage zone, uint64 nowTs) private view returns (bool) {
+        return
+            allowReclaim &&
+            zone.owner != address(0) &&
+            !zone.blocked &&
+            zone.expiresAt + GRACE_PERIOD < nowTs;
+    }
+
+    /// @dev Поиск подстроки в bytes.
+    function _contains(bytes memory haystack, bytes memory needle) private pure returns (bool) {
+        uint256 needleLength = needle.length;
+        if (needleLength == 0 || haystack.length < needleLength) return false;
+        for (uint256 i = 0; i <= haystack.length - needleLength; i++) {
+            bool matched = true;
+            for (uint256 j = 0; j < needleLength; j++) {
+                if (haystack[i + j] != needle[j]) {
+                    matched = false;
+                    break;
+                }
+            }
+            if (matched) return true;
+        }
+        return false;
+    }
+}

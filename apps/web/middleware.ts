@@ -26,16 +26,24 @@ const RESERVED_PATHS = new Set([
   'sitemap.xml',
 ]);
 
-/** Возвращает имя зоны, если запрос пришёл на поддомен резолвера: myzone.example.com → myzone */
-function resolverZone(request: NextRequest): string | null {
+/**
+ * Разбирает имя на поддомене резолвера. Два уровня:
+ *   myzone.example.com        → зона .myzone
+ *   blog.myzone.example.com   → поддомен blog в зоне .myzone
+ */
+function resolverTarget(request: NextRequest): { zone: string; label: string | null } | null {
   const base = (process.env.RESOLVER_DOMAIN ?? '').trim().toLowerCase();
   if (!base) return null;
   const host = (request.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? '';
   if (!host.endsWith(`.${base}`)) return null;
-  const label = host.slice(0, -(base.length + 1));
-  if (!label || label.includes('.')) return null;
-  if (['www', 'api', 'admin', 'app'].includes(label)) return null;
-  return label;
+  const prefix = host.slice(0, -(base.length + 1));
+  if (!prefix) return null;
+  const parts = prefix.split('.');
+  const first = parts[0] ?? '';
+  if (['www', 'api', 'admin', 'app'].includes(first)) return null;
+  if (parts.length === 1) return { zone: first, label: null };
+  if (parts.length === 2 && parts[1]) return { zone: parts[1], label: first };
+  return null;
 }
 
 /**
@@ -56,22 +64,41 @@ function zoneFromPath(request: NextRequest): string | null {
 export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== 'production';
 
-  // Резолвер: myzone.вашдомен → страница зоны (переписывание адреса, без редиректа).
-  const zone = resolverZone(request);
-  if (zone && request.nextUrl.pathname === '/') {
+  // Резолвер: myzone.вашдомен → страница зоны, blog.myzone.вашдомен → страница поддомена.
+  const target = resolverTarget(request);
+  if (target && request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/resolve';
-    url.search = `?zone=${encodeURIComponent(zone)}`;
+    url.search = target.label
+      ? `?zone=${encodeURIComponent(target.zone)}&label=${encodeURIComponent(target.label)}`
+      : `?zone=${encodeURIComponent(target.zone)}`;
     return NextResponse.rewrite(url);
   }
 
-  // Тот же резолвер без своего домена: /myzone открывает зону .myzone.
-  const pathZone = zone ? null : zoneFromPath(request);
-  if (pathZone) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/resolve';
-    url.search = `?zone=${encodeURIComponent(pathZone)}&via=path`;
-    return NextResponse.rewrite(url);
+  // Тот же резолвер без своего домена: /myzone → зона, /myzone/blog → поддомен.
+  if (!target) {
+    const segments = request.nextUrl.pathname.split('/').filter(Boolean);
+    const pathTld = zoneFromPath(request);
+    if (pathTld) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/resolve';
+      url.search = `?zone=${encodeURIComponent(pathTld)}&via=path`;
+      return NextResponse.rewrite(url);
+    }
+    const [first, second] = segments;
+    if (
+      segments.length === 2 &&
+      first &&
+      second &&
+      !RESERVED_PATHS.has(first.toLowerCase()) &&
+      /^[a-z0-9][a-z0-9-]{0,62}$/i.test(second) &&
+      (request.method === 'GET' || request.method === 'HEAD')
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/resolve';
+      url.search = `?zone=${encodeURIComponent(first)}&label=${encodeURIComponent(second)}&via=path`;
+      return NextResponse.rewrite(url);
+    }
   }
 
   const response = NextResponse.next();

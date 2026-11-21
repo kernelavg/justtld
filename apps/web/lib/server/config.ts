@@ -1,5 +1,10 @@
 import { loadRootEnv } from '@justtld/shared/env';
-import { tryReadDeployment, type Deployment } from '@justtld/shared/deployment';
+import {
+  tryReadDeployment,
+  tryReadSubdomainsDeployment,
+  type Deployment,
+  type SubdomainsDeployment,
+} from '@justtld/shared/deployment';
 
 loadRootEnv();
 
@@ -15,6 +20,23 @@ export function registryAddress(): `0x${string}` {
     );
   }
   return dep.address;
+}
+
+/** Деплой контракта поддоменов (может отсутствовать — тогда API отвечает 501). */
+export function subdomainsDeployment(): SubdomainsDeployment | null {
+  return tryReadSubdomainsDeployment();
+}
+
+export function subdomainsAddress(): `0x${string}` {
+  const dep = subdomainsDeployment();
+  if (!dep) {
+    throw new Error('Контракт поддоменов не развёрнут: deployments/<сеть>.subdomains.json');
+  }
+  return dep.address;
+}
+
+export function subdomainsEnabled(): boolean {
+  return subdomainsDeployment() !== null;
 }
 
 export function rpcUrl(): string {

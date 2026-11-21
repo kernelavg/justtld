@@ -1,7 +1,12 @@
 import { REGISTRY_ABI } from '@justtld/shared/generated/registry';
 import { loadRootEnv } from '@justtld/shared/env';
-import { findDeploymentFile, readDeployment } from '@justtld/shared/deployment';
-import type { Deployment } from '@justtld/shared/deployment';
+import { SUBDOMAINS_ABI } from '@justtld/shared/generated/subdomains';
+import {
+  findDeploymentFile,
+  readDeployment,
+  tryReadSubdomainsDeployment,
+} from '@justtld/shared/deployment';
+import type { Deployment, SubdomainsDeployment } from '@justtld/shared/deployment';
 
 export { findDeploymentFile, readDeployment };
 export type { Deployment };
@@ -17,11 +22,16 @@ export type IndexerConfig = {
   batchSize: number;
   persistCheckpoint: boolean;
   abi: typeof REGISTRY_ABI;
+  /** Контракт поддоменов (может отсутствовать — тогда индексируются только зоны). */
+  subdomainsAddress: `0x${string}` | null;
+  subdomainsDeployBlock: number;
+  subdomainsAbi: typeof SUBDOMAINS_ABI;
 };
 
 export function loadConfig(overrides: Partial<IndexerConfig> = {}): IndexerConfig {
   loadRootEnv();
   const deployment = readDeployment();
+  const subdomains: SubdomainsDeployment | null = tryReadSubdomainsDeployment();
   const deployBlock = Number(deployment.deployBlock ?? 0);
   const envStartBlock = process.env.INDEXER_START_BLOCK?.trim()
     ? Number.parseInt(process.env.INDEXER_START_BLOCK, 10)
@@ -42,6 +52,9 @@ export function loadConfig(overrides: Partial<IndexerConfig> = {}): IndexerConfi
     batchSize: Number.parseInt(process.env.INDEXER_BATCH_SIZE ?? '2000', 10),
     persistCheckpoint: true,
     abi: REGISTRY_ABI,
+    subdomainsAddress: subdomains?.address ?? null,
+    subdomainsDeployBlock: Number(subdomains?.deployBlock ?? 0),
+    subdomainsAbi: SUBDOMAINS_ABI,
     ...overrides,
   };
 }

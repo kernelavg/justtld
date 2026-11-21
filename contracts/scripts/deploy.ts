@@ -53,6 +53,13 @@ async function main() {
   console.log('═'.repeat(74));
 
   // Идемпотентность: если контракт уже есть на этой сети — переиспользуем его.
+  // FORCE_DEPLOY=1 заставляет задеплоить заново (новая версия контракта), старый файл уходит в архив.
+  const FORCE_DEPLOY = process.env.FORCE_DEPLOY === '1';
+  if (fs.existsSync(DEPLOYMENT_FILE) && FORCE_DEPLOY) {
+    const archived = DEPLOYMENT_FILE.replace(/\.json$/, `.prev-${Date.now()}.json`);
+    fs.renameSync(DEPLOYMENT_FILE, archived);
+    console.log(`! FORCE_DEPLOY=1 — предыдущий деплой сохранён как ${path.basename(archived)}`);
+  }
   if (fs.existsSync(DEPLOYMENT_FILE)) {
     const existing = JSON.parse(fs.readFileSync(DEPLOYMENT_FILE, 'utf8')) as Deployment;
     if (existing.chainId === chainId) {
@@ -107,7 +114,44 @@ async function main() {
   if (initialOwner.toLowerCase() !== deployer.address.toLowerCase()) {
     console.log(`Owner контракта при деплое: ${initialOwner} (из ADMIN_ADDRESS)`);
   }
-  const contract = await factory.deploy(initialOwner, allowReclaim);
+  /**
+   * Sepolia отдаёт «дикие» оценки комиссии, а при почти нулевом base fee — ещё и завышенный
+   * estimateGas (35–40M вместо реальных 5.3M). Поэтому на публичных сетях комиссию и лимит
+   * газа задаём сами: maxFee = 3 × baseFee + PRIORITY_FEE_WEI, gasLimit = DEPLOY_GAS_LIMIT.
+   */
+  const deployOverrides: {
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+    gasLimit?: bigint;
+  } = {};
+  if (isPublicNetwork) {
+    const block = await ethers.provider.getBlock('latest');
+    const baseFee = block?.baseFeePerGas ?? 0n;
+    const priorityFee = BigInt(process.env.PRIORITY_FEE_WEI ?? '1000000'); // 0.001 gwei
+    const capGwei = BigInt(process.env.MAX_FEE_GWEI ?? '0');
+    let maxFee = baseFee * 3n + priorityFee;
+    if (capGwei > 0n) {
+      const cap = capGwei * 10n ** 9n;
+      if (maxFee > cap) maxFee = cap;
+    }
+    if (maxFee < baseFee) maxFee = baseFee + priorityFee;
+    deployOverrides.maxFeePerGas = maxFee;
+    deployOverrides.maxPriorityFeePerGas = priorityFee;
+    deployOverrides.gasLimit = BigInt(process.env.DEPLOY_GAS_LIMIT ?? '6000000');
+    const worstCase = deployOverrides.gasLimit * maxFee;
+    const balance = await ethers.provider.getBalance(deployer.address);
+    console.log(
+      `Комиссия: baseFee ${baseFee} wei, maxFee ${ethers.formatUnits(maxFee, 'gwei')} gwei, gasLimit ${deployOverrides.gasLimit}`,
+    );
+    console.log(
+      `Худший случай: ${ethers.formatEther(worstCase)} ETH из ${ethers.formatEther(balance)} ETH на балансе`,
+    );
+    if (worstCase > balance) {
+      throw new Error('Не хватает ETH на газ: пополните burner или снизьте DEPLOY_GAS_LIMIT.');
+    }
+  }
+
+  const contract = await factory.deploy(initialOwner, allowReclaim, deployOverrides);
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   const receipt = await contract.deploymentTransaction()?.wait();

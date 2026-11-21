@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getZoneByTld, refreshExpiredStatuses } from '@justtld/db';
+import { getSubdomainByName, getZoneByTld, refreshExpiredStatuses } from '@justtld/db';
 import { formatDateTime, normalizeTld, shortenAddress, validateTldFormat } from '@justtld/shared';
 
 export const dynamic = 'force-dynamic';
@@ -15,9 +15,9 @@ export const dynamic = 'force-dynamic';
 export default async function ResolvePage({
   searchParams,
 }: {
-  searchParams: Promise<{ zone?: string; via?: string }>;
+  searchParams: Promise<{ zone?: string; via?: string; label?: string }>;
 }) {
-  const { zone: raw, via } = await searchParams;
+  const { zone: raw, via, label: rawLabel } = await searchParams;
   // via=path — имя открыто по пути (site/myzone), а не по поддомену: подсказываем разницу.
   const pathMode = via === 'path';
   const label = decodeURIComponent(raw ?? '').trim();
@@ -30,6 +30,14 @@ export default async function ResolvePage({
     /\/+$/,
     '',
   );
+
+  // Двухуровневый резолвер: blog.femboy.<домен> или /femboy/blog.
+  const subLabel = decodeURIComponent(rawLabel ?? '')
+    .trim()
+    .toLowerCase();
+  if (subLabel) {
+    return resolveSubdomain({ tld, subLabel, pathMode, appUrl });
+  }
 
   if (!label) {
     return (
@@ -165,6 +173,119 @@ export default async function ResolvePage({
       <a className="text-sm underline" href={`${appUrl}/zone/${encodeURIComponent(tld)}`}>
         Подробнее о зоне →
       </a>
+    </Shell>
+  );
+}
+
+/**
+ * Карточка поддомена: `blog.femboy.justtld.online` или `/femboy/blog`.
+ * Поддомен живёт в отдельном контракте, поэтому читаем кэш индексатора,
+ * а если записи в кэше нет — честно показываем, что имя свободно.
+ */
+async function resolveSubdomain(params: {
+  tld: string;
+  subLabel: string;
+  pathMode: boolean;
+  appUrl: string;
+}) {
+  const { tld, subLabel, pathMode, appUrl } = params;
+  const name = `${subLabel}.${tld.replace(/^\./, '')}`;
+  const hint = pathMode
+    ? `Имя открыто по пути: /${tld.replace(/^\./, '')}/${subLabel}. С доменом этот же адрес станет ${name}.вашдомен.`
+    : undefined;
+
+  if (!/^[a-z0-9-]{1,32}$/.test(subLabel)) {
+    return (
+      <Shell title={name} hint={hint}>
+        <p className="text-destructive">Некорректная метка поддомена</p>
+        <p className="text-muted-foreground">
+          Метка — от 1 до 32 символов: латиница, цифры и дефис, без дефиса по краям.
+        </p>
+      </Shell>
+    );
+  }
+
+  const subdomain = await getSubdomainByName(name).catch(() => null);
+
+  if (!subdomain || subdomain.status !== 'active') {
+    const expired = subdomain?.status === 'expired';
+    return (
+      <Shell title={name} hint={hint}>
+        <p className="text-lg font-medium">
+          {expired ? 'Срок этого поддомена истёк' : 'Поддомен свободен'}
+        </p>
+        <p className="text-muted-foreground">
+          {expired
+            ? 'Владелец зоны или поддомена не продлил его. Метку может занять владелец зоны.'
+            : `Поддомены создаёт владелец зоны ${tld} — у него же можно попросить ${subLabel}.`}
+        </p>
+        <a className="text-sm underline" href={`${appUrl}/zone/${encodeURIComponent(tld)}`}>
+          Открыть зону {tld} →
+        </a>
+      </Shell>
+    );
+  }
+
+  const target = redirectTarget(subdomain.metadata);
+  if (target) redirect(target);
+
+  const metadata = prettyMetadata(subdomain.metadata);
+  return (
+    <Shell title={name} hint={hint}>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="rounded-full bg-success/10 px-2 py-0.5 text-success">активен</span>
+        <span className="text-muted-foreground">
+          до {formatDateTime(new Date(subdomain.expiresAt), 'ru')}
+        </span>
+      </div>
+
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Владелец</dt>
+          <dd className="mono break-all text-sm">
+            <a
+              className="underline decoration-dotted hover:text-foreground"
+              href={explorerUrl('address', subdomain.ownerAddress)}
+            >
+              {subdomain.ownerAddress}
+            </a>
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Зона</dt>
+          <dd className="text-sm">
+            <a className="underline" href={`${appUrl}/zone/${encodeURIComponent(tld)}`}>
+              {tld}
+            </a>{' '}
+            <span className="text-muted-foreground">
+              (владелец зоны {shortenAddress(subdomain.zoneOwnerAddress)})
+            </span>
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Зарегистрирован</dt>
+          <dd className="text-sm">{formatDateTime(new Date(subdomain.registeredAt), 'ru')}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Метка</dt>
+          <dd className="text-sm">
+            {subdomain.label} <span className="text-muted-foreground">в {tld}</span>
+          </dd>
+        </div>
+      </dl>
+
+      {metadata ? (
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Метаданные</p>
+          <pre className="mono mt-1 overflow-x-auto rounded-md bg-muted p-3 text-xs">
+            {metadata}
+          </pre>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Владелец не указал адрес сайта в метаданных поддомена.
+        </p>
+      )}
     </Shell>
   );
 }

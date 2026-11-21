@@ -86,6 +86,57 @@ CREATE INDEX IF NOT EXISTS transfer_requests_status_idx ON transfer_requests (st
 CREATE UNIQUE INDEX IF NOT EXISTS transfer_requests_pending_uniq
   ON transfer_requests (zone_id) WHERE status = 'pending';
 
+-- ─────────────────────────── subdomains ──────────────────────────
+-- Поддомены живут в отдельном контракте JustTLDSubdomains (см. docs/SUBDOMAINS.md):
+-- зоны — в реестре, поддомены — в нём. Кэш здесь повторяет состояние контракта.
+CREATE TABLE IF NOT EXISTS subdomains (
+  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name               text NOT NULL,
+  tld                text NOT NULL,
+  label              text NOT NULL,
+  owner_address      text NOT NULL,
+  zone_owner_address text NOT NULL,
+  status             zone_status NOT NULL DEFAULT 'active',
+  registered_at      timestamptz NOT NULL,
+  expires_at         timestamptz NOT NULL,
+  metadata           text NOT NULL DEFAULT '',
+  transaction_hash   text NOT NULL,
+  block_number       bigint NOT NULL,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT subdomains_name_fmt  CHECK (name ~ '^[a-z0-9-]{1,32}\.[a-z0-9-]{2,19}$'),
+  CONSTRAINT subdomains_label_fmt CHECK (label ~ '^[a-z0-9-]{1,32}$'),
+  CONSTRAINT subdomains_tld_fmt   CHECK (tld ~ '^\.[a-z0-9-]{2,19}$'),
+  CONSTRAINT subdomains_owner_fmt CHECK (owner_address ~ '^0x[0-9a-f]{40}$'),
+  CONSTRAINT subdomains_tx_fmt    CHECK (transaction_hash ~ '^0x[0-9a-f]{64}$')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS subdomains_name_key       ON subdomains (name);
+CREATE INDEX IF NOT EXISTS subdomains_tld_idx               ON subdomains (tld);
+CREATE INDEX IF NOT EXISTS subdomains_owner_idx             ON subdomains (owner_address);
+CREATE INDEX IF NOT EXISTS subdomains_status_expires_idx    ON subdomains (status, expires_at);
+CREATE INDEX IF NOT EXISTS subdomains_name_trgm_idx         ON subdomains USING gin (name gin_trgm_ops);
+
+-- ─────────────────────── subdomain_events ────────────────────────
+CREATE TABLE IF NOT EXISTS subdomain_events (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subdomain_id     uuid NOT NULL REFERENCES subdomains (id) ON DELETE CASCADE,
+  name             text NOT NULL,
+  event_type       text NOT NULL,
+  actor_address    text NOT NULL,
+  transaction_hash text NOT NULL,
+  block_number     bigint NOT NULL,
+  log_index        int NOT NULL DEFAULT 0,
+  details          jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT subdomain_events_type_chk CHECK (
+    event_type IN ('registered', 'transferred', 'renewed', 'metadata_updated', 'blocked', 'unblocked')
+  )
+);
+CREATE INDEX IF NOT EXISTS subdomain_events_sub_idx ON subdomain_events (subdomain_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS subdomain_events_actor_idx ON subdomain_events (actor_address);
+CREATE UNIQUE INDEX IF NOT EXISTS subdomain_events_log_key
+  ON subdomain_events (transaction_hash, log_index);
+
 -- ─────────────────────── indexer служебные ───────────────────────
 CREATE TABLE IF NOT EXISTS indexer_checkpoints (
   id               int PRIMARY KEY DEFAULT 1 CHECK (id = 1),

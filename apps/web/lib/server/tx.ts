@@ -1,7 +1,8 @@
 import { BaseError, ContractFunctionRevertedError, encodeFunctionData, type Abi } from 'viem';
 import { REGISTRY_ABI } from '@justtld/shared/generated/registry';
+import { SUBDOMAINS_ABI } from '@justtld/shared/generated/subdomains';
 import { ApiError, type UnsignedTx } from '@justtld/shared';
-import { chainId, registryAddress } from './config';
+import { chainId, registryAddress, subdomainsAddress } from './config';
 import { getPublicClient } from './chain';
 
 export type RegistryFunction =
@@ -18,6 +19,48 @@ export type RegistryFunction =
   | 'addReservedTLD'
   | 'removeReservedTLD'
   | 'transferOwnership';
+
+export type SubdomainFunction =
+  'registerSubdomain' | 'renewSubdomain' | 'transferSubdomain' | 'setSubdomainMetadata';
+
+/** Кодирует вызов контракта поддоменов в неподписанную транзакцию. */
+export function buildSubdomainTx(params: {
+  functionName: SubdomainFunction;
+  args?: readonly unknown[];
+  sender: string;
+}): UnsignedTx {
+  const data = encodeFunctionData({
+    abi: SUBDOMAINS_ABI as unknown as Abi,
+    functionName: params.functionName,
+    args: (params.args ?? []) as unknown[],
+  });
+  return {
+    to: subdomainsAddress(),
+    data,
+    value: '0',
+    chainId: chainId(),
+    from: params.sender.toLowerCase(),
+  };
+}
+
+/** Симуляция вызова контракта поддоменов от имени пользователя. */
+export async function simulateSubdomainCall(params: {
+  functionName: SubdomainFunction;
+  args?: readonly unknown[];
+  account: `0x${string}`;
+}): Promise<void> {
+  try {
+    await getPublicClient().simulateContract({
+      address: subdomainsAddress(),
+      abi: SUBDOMAINS_ABI as unknown as Abi,
+      functionName: params.functionName,
+      args: (params.args ?? []) as unknown[],
+      account: params.account,
+    });
+  } catch (error) {
+    throw mapContractError(error);
+  }
+}
 
 /** Кодирует вызов контракта в неподписанную транзакцию. */
 export function buildUnsignedTx(params: {
@@ -64,6 +107,39 @@ const CUSTOM_ERROR_MAP: Record<string, { code: string; message: string; status: 
     code: 'INVALID_REASON',
     message: 'Некорректная причина блокировки',
     status: 400,
+  },
+  SubdomainNotFound: {
+    code: 'SUBDOMAIN_NOT_FOUND',
+    message: 'Поддомен не найден или истёк',
+    status: 404,
+  },
+  SubdomainAlreadyExists: { code: 'SUBDOMAIN_TAKEN', message: 'Поддомен уже занят', status: 409 },
+  SubdomainIsBlocked: { code: 'SUBDOMAIN_BLOCKED', message: 'Поддомен заблокирован', status: 409 },
+  SubdomainBeyondZone: {
+    code: 'SUBDOMAIN_BEYOND_ZONE',
+    message: 'Срок поддомена не может быть больше срока зоны — продлите зону',
+    status: 409,
+  },
+  NotAuthorized: {
+    code: 'NOT_AUTHORIZED',
+    message: 'Нужны права владельца поддомена или зоны',
+    status: 403,
+  },
+  NotSubdomainOwner: {
+    code: 'NOT_SUBDOMAIN_OWNER',
+    message: 'Вы не владелец поддомена',
+    status: 403,
+  },
+  InvalidLabel: { code: 'INVALID_LABEL', message: 'Некорректная метка поддомена', status: 400 },
+  InvalidZone: {
+    code: 'INVALID_ZONE',
+    message: 'Зона не найдена, истекла или заблокирована',
+    status: 409,
+  },
+  NotOwner: {
+    code: 'FORBIDDEN',
+    message: 'Действие доступно только владельцу контракта',
+    status: 403,
   },
   OwnableUnauthorizedAccount: {
     code: 'FORBIDDEN',

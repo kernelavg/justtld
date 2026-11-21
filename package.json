@@ -17,6 +17,8 @@
     "deploy:fresh": "npm run deploy:fresh -w @justtld/contracts",
     "deploy:sepolia": "npm run deploy:sepolia -w @justtld/contracts",
     "deploy:mainnet": "npm run deploy:mainnet -w @justtld/contracts",
+    "deploy:subdomains:sepolia": "npm run deploy:subdomains:sepolia -w @justtld/contracts",
+    "deploy:subdomains:mainnet": "npm run deploy:subdomains:mainnet -w @justtld/contracts",
     "verify:sepolia": "node scripts/verify-explorer.mjs sepolia",
     "verify:mainnet": "node scripts/verify-explorer.mjs mainnet",
     "db:setup": "bash scripts/setup-db.sh",
