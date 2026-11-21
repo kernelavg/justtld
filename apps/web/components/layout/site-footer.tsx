@@ -32,6 +32,12 @@ export function SiteFooter() {
           <Link href="/register" className="transition-colors hover:text-foreground">
             {t('nav.register')}
           </Link>
+          <Link href="/root" className="transition-colors hover:text-foreground">
+            Root DNS
+          </Link>
+          <Link href="/icann" className="transition-colors hover:text-foreground">
+            ICANN / WHOIS
+          </Link>
           <Link href="/docs" className="transition-colors hover:text-foreground">
             API
           </Link>

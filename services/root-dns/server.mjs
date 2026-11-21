@@ -8,7 +8,10 @@ import dnsPacket from 'dns-packet';
 const HOST = process.env.ROOT_DNS_HOST || '127.0.0.1';
 const DNS_PORT = Number(process.env.ROOT_DNS_PORT || 5353);
 const DOH_PORT = Number(process.env.ROOT_DOH_PORT || 5354);
+const WHOIS_HOST = process.env.WHOIS_HOST || '0.0.0.0';
+const WHOIS_PORT = Number(process.env.WHOIS_PORT || 43);
 const REGISTRY_URL = process.env.JUSTTLD_REGISTRY_URL || 'https://justtld.online/api/root-dns/records';
+const RDAP_BASE_URL = process.env.JUSTTLD_RDAP_URL || 'https://justtld.online/api/rdap/domain';
 const GATEWAY_IP = process.env.JUSTTLD_GATEWAY_IP || '95.182.89.37';
 const CACHE_FILE = process.env.JUSTTLD_CACHE_FILE || path.join(process.cwd(), 'zones-cache.json');
 const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MS || 15000);
@@ -438,6 +441,64 @@ const dohServer = http.createServer(async (req, res) => {
 
 dohServer.listen(DOH_PORT, HOST, () => {
   console.log(`[root-dns] DoH HTTP listening on http://${HOST}:${DOH_PORT}/dns-query`);
+});
+
+// 4. WHOIS TCP :43 Server (RFC 3912)
+function formatWhois(query, rdap) {
+  if (!rdap || rdap.errorCode) {
+    return [
+      `No match for "${query.toUpperCase()}".`,
+      ``,
+      `Register this TLD / domain at: https://justtld.online/store`,
+      `>>> Last update of WHOIS database: ${new Date().toISOString()} <<<`,
+      ``,
+    ].join('\r\n');
+  }
+  const created = (rdap.events || []).find((e) => e.eventAction === 'registration')?.eventDate || 'N/A';
+  const expires = (rdap.events || []).find((e) => e.eventAction === 'expiration')?.eventDate || 'N/A';
+  const registrant = (rdap.entities || []).find((e) => (e.roles || []).includes('registrant'))?.handle || 'Redacted';
+  const lines = [
+    `   Domain Name: ${(rdap.ldhName || query).toUpperCase()}`,
+    `   Registry Domain ID: ${rdap.handle || 'JUSTTLD'}`,
+    `   Registrar WHOIS Server: whois.justtld.online`,
+    `   Registrar URL: https://justtld.online`,
+    `   Creation Date: ${created}`,
+    `   Registry Expiry Date: ${expires}`,
+    `   Registrar: JustTLD Root Authority (Independent No-ICANN Root)`,
+    `   Registrant Organization: ${registrant}`,
+    `   Domain Status: ${(rdap.status || ['active']).join(', ')}`,
+    ...(rdap.nameservers || []).map((ns) => `   Name Server: ${ns.ldhName}`),
+    `   DNSSEC: unsigned`,
+    `   URL of the JustTLD RDAP: https://justtld.online/api/rdap/domain/${encodeURIComponent(rdap.ldhName || query)}`,
+    `>>> Last update of WHOIS database: ${new Date().toISOString()} <<<`,
+    ``,
+  ];
+  return lines.join('\r\n');
+}
+
+const whoisServer = net.createServer((socket) => {
+  let reqBuf = '';
+  socket.setTimeout(5000, () => socket.destroy());
+  socket.on('data', async (chunk) => {
+    reqBuf += chunk.toString('utf8');
+    if (!reqBuf.includes('\n') && reqBuf.length < 256) return;
+    const raw = reqBuf.split(/\r?\n/)[0].trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+    if (!raw || !/^[a-z0-9-]+(\.[a-z0-9-]+)?$/.test(raw)) {
+      socket.end('Invalid WHOIS query.\r\n');
+      return;
+    }
+    try {
+      const r = await fetch(`${RDAP_BASE_URL}/${encodeURIComponent(raw)}`, { cache: 'no-store' });
+      const data = await r.json();
+      socket.end(formatWhois(raw, data));
+    } catch {
+      socket.end('WHOIS temporary error.\r\n');
+    }
+  });
+});
+
+whoisServer.listen(WHOIS_PORT, WHOIS_HOST, () => {
+  console.log(`[root-dns] WHOIS TCP listening on ${WHOIS_HOST}:${WHOIS_PORT}`);
 });
 
 loadDiskCache();

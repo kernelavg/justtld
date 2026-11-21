@@ -944,3 +944,149 @@ export async function getRootDnsSnapshot(): Promise<RootDnsSnapshot> {
   };
 }
 
+export type IcannDirectoryEntry = {
+  found: boolean;
+  level: 1 | 2;
+  fqdn: string;
+  tld: string;
+  zone: string;
+  subLabel: string;
+  status: string;
+  ownerAddress: string | null;
+  source: 'onchain' | 'custody' | 'none';
+  registeredAt: string | null;
+  expiresAt: string | null;
+  nameservers: string[];
+  dnsRecords: DnsRecordDto[];
+  siteMode: string;
+};
+
+/** Карточка домена/TLD для протоколов RDAP (RFC 7483) и WHOIS (:43). */
+export async function getIcannDirectoryEntry(rawName: string): Promise<IcannDirectoryEntry> {
+  const clean = rawName.trim().toLowerCase().replace(/^\.+|\.+$/g, '');
+  const parts = clean.split('.').filter(Boolean);
+  const level: 1 | 2 = parts.length >= 2 ? 2 : 1;
+  const zone = parts.length >= 2 ? (parts[parts.length - 1] ?? clean) : clean;
+  const subLabel = parts.length >= 2 ? (parts[0] ?? '') : '';
+  const tld = `.${zone}`;
+  const fqdn = subLabel ? `${subLabel}.${zone}` : zone;
+
+  const [onchainZone, onchainSub, custody, settings, records] = await Promise.all([
+    queryOne<{
+      owner_address: string;
+      status: string;
+      registered_at: Date;
+      expires_at: Date;
+    }>(`SELECT owner_address, status, registered_at, expires_at FROM zones WHERE tld = $1`, [tld]),
+    subLabel
+      ? queryOne<{
+          owner_address: string;
+          status: string;
+          registered_at: Date;
+          expires_at: Date;
+        }>(
+          `SELECT owner_address, status, registered_at, expires_at FROM subdomains WHERE name = $1`,
+          [`${subLabel}.${zone}`],
+        )
+      : Promise.resolve(null),
+    queryOne<{
+      owner_address: string;
+      source: string;
+      created_at: Date;
+      expires_at: Date;
+    }>(
+      `SELECT owner_address, source, created_at, expires_at FROM zone_custody WHERE tld = $1 AND sub_label = $2`,
+      [tld, subLabel],
+    ),
+    queryOne<{ mode: string }>(
+      `SELECT mode FROM site_settings WHERE tld = $1 AND sub_label = $2`,
+      [tld, subLabel],
+    ),
+    listDnsRecords(tld, subLabel),
+  ]);
+
+  const nsRecords = records
+    .filter((r) => r.recordType === 'NS')
+    .map((r) => r.content.trim().toLowerCase().replace(/\.+$/, ''));
+  const nameservers =
+    nsRecords.length > 0
+      ? Array.from(new Set(nsRecords))
+      : ['a.root.justtld.online', 'ns1.root.justtld.online'];
+
+  if (subLabel && onchainSub) {
+    return {
+      found: true,
+      level,
+      fqdn,
+      tld,
+      zone,
+      subLabel,
+      status: onchainSub.status,
+      ownerAddress: onchainSub.owner_address.toLowerCase(),
+      source: 'onchain',
+      registeredAt: iso(onchainSub.registered_at),
+      expiresAt: iso(onchainSub.expires_at),
+      nameservers,
+      dnsRecords: records,
+      siteMode: settings?.mode ?? 'card',
+    };
+  }
+
+  if (!subLabel && onchainZone) {
+    return {
+      found: true,
+      level,
+      fqdn,
+      tld,
+      zone,
+      subLabel,
+      status: onchainZone.status,
+      ownerAddress: onchainZone.owner_address.toLowerCase(),
+      source: 'onchain',
+      registeredAt: iso(onchainZone.registered_at),
+      expiresAt: iso(onchainZone.expires_at),
+      nameservers,
+      dnsRecords: records,
+      siteMode: settings?.mode ?? 'card',
+    };
+  }
+
+  if (custody) {
+    const expired = custody.expires_at.getTime() <= Date.now();
+    return {
+      found: true,
+      level,
+      fqdn,
+      tld,
+      zone,
+      subLabel,
+      status: expired ? 'expired' : 'active',
+      ownerAddress: custody.owner_address.toLowerCase(),
+      source: 'custody',
+      registeredAt: iso(custody.created_at),
+      expiresAt: iso(custody.expires_at),
+      nameservers,
+      dnsRecords: records,
+      siteMode: settings?.mode ?? 'card',
+    };
+  }
+
+  return {
+    found: false,
+    level,
+    fqdn,
+    tld,
+    zone,
+    subLabel,
+    status: 'available',
+    ownerAddress: null,
+    source: 'none',
+    registeredAt: null,
+    expiresAt: null,
+    nameservers,
+    dnsRecords: [],
+    siteMode: 'none',
+  };
+}
+
+

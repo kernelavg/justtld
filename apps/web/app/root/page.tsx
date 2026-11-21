@@ -158,6 +158,9 @@ export default function RootDnsPage() {
               <Button asChild variant="outline" size="sm">
                 <Link href="/auctions">Аукционы зон</Link>
               </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/icann">Реестр IANA / RDAP / WHOIS</Link>
+              </Button>
               <Button variant="outline" size="sm" onClick={copyDoh} className="gap-1.5">
                 {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                 Скопировать DoH
