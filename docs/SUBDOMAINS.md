@@ -100,7 +100,8 @@
 `apps/web/middleware.ts` разбирает хост на два уровня:
 
 - `myzone.justtld.online` → карточка зоны `.myzone`;
-- `blog--myzone.justtld.online` → карточка поддомена `blog.myzone` (плоский вид, см. ниже);
+- `myzone.justtld.online/blog` → карточка поддомена `blog.myzone` (первый сегмент пути на хосте зоны);
+- `blog--myzone.justtld.online` → то же самое в виде отдельного хоста (плоский вид, см. ниже);
 - `blog.myzone.justtld.online` → то же самое, если для такого имени есть сертификат;
 - без своего домена то же самое по путям: `/myzone` и `/myzone/blog`.
 
@@ -125,9 +126,18 @@ node scripts/setup-zone-hosts.mjs justtld-demo
 node scripts/setup-zone-hosts.mjs --all        # все зоны из /api/zones
 ```
 
-Скрипту нужен токен Cloudflare с правами **Zone:Read + Zone:Edit (все зоны), Zone:Create,
-Zone Settings/Rulesets:Edit, DNS:Edit**. Токен «только DNS одной зоны» не подойдёт: без
-`Zone:Create` нельзя создать дочернюю зону, без Rulesets — включить подмену Host.
+Скрипту нужен токен Cloudflare (My Profile → API Tokens → Create Custom Token) с правами:
+
+| Разрешение в дашборде | API-имя | Зачем |
+| --- | --- | --- |
+| Zone → Zone → Edit | `Zone Write` | создать дочернюю зону |
+| Zone → DNS → Edit | `DNS Write` | NS-делегирование и записи дочерней зоны |
+| Zone → Transform Rules → Edit | `Zone Transform Rules Write` | заголовок `X-Forwarded-Host` |
+| Zone → Origin Rules → Edit | `Zone Origin Rules Write` | подмена `Host` на адрес Render |
+
+Ресурсы зон: **All zones from an account**. Токен «только DNS одной зоны» не подойдёт:
+без права создавать зоны скрипт падает на `com.cloudflare.api.account.zone.create`.
+Права `Config Rules` для этого бесполезны — это другой продукт Cloudflare.
 Сертификат дочерней зоны Cloudflare выпускает обычно за 5–15 минут после делегирования NS.
 
 ### Почему поддомен в хосте пишется через `--`
