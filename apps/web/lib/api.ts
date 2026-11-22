@@ -362,6 +362,65 @@ export type StoreCatalogResponse = {
   myCustody: ZoneCustodyDto[];
 };
 
+export type MillionCatalogItemDto = {
+  id: string;
+  kind: 'zone' | 'subdomain';
+  tld: string;
+  subLabel: string;
+  displayName: string;
+  rootUrl: string;
+  gatewayHost: string;
+  category: string;
+  priceRub: number;
+  priceUsdt: number;
+  periodDays: number;
+  available: boolean;
+  isExactMatch?: boolean;
+};
+
+export type MillionCatalogResponse = {
+  items: MillionCatalogItemDto[];
+  totalMatched: number;
+  totalCatalogItems: number;
+  totalZones: number;
+  totalSubdomains: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  priceRange: { minRub: number; maxRub: number };
+  categories: Array<{ id: string; labelRu: string; labelEn: string }>;
+  gateways: {
+    yoomoneyConfigured: boolean;
+    cryptobotConfigured: boolean;
+    sandboxEnabled: boolean;
+  };
+};
+
+export const getMillionCatalog = (params: {
+  q?: string;
+  kind?: 'all' | 'zone' | 'subdomain';
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: 'featured' | 'price_asc' | 'price_desc' | 'short';
+  page?: number;
+  limit?: number;
+  onlyAvailable?: boolean;
+}) => {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set('q', params.q);
+  if (params.kind && params.kind !== 'all') sp.set('kind', params.kind);
+  if (params.category && params.category !== 'all') sp.set('category', params.category);
+  if (params.minPrice !== undefined) sp.set('minPrice', String(params.minPrice));
+  if (params.maxPrice !== undefined) sp.set('maxPrice', String(params.maxPrice));
+  if (params.sort && params.sort !== 'featured') sp.set('sort', params.sort);
+  if (params.page && params.page > 1) sp.set('page', String(params.page));
+  if (params.limit) sp.set('limit', String(params.limit));
+  if (params.onlyAvailable) sp.set('onlyAvailable', '1');
+  const qs = sp.toString();
+  return apiFetch<MillionCatalogResponse>(`/api/catalog${qs ? `?${qs}` : ''}`);
+};
+
 export const getStoreCatalog = () => apiFetch<StoreCatalogResponse>('/api/store');
 
 export const createStoreOrder = (payload: {
@@ -371,6 +430,7 @@ export const createStoreOrder = (payload: {
   listingId?: string;
   tld?: string;
   subLabel?: string;
+  catalogPrice?: boolean;
 }) =>
   postJson<{
     order: PaymentOrderDto;

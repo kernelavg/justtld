@@ -13,6 +13,7 @@ import { getSession } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const BASE_NAV: Array<{ href: string; key: TranslationKey }> = [
+  { href: '/catalog', key: 'nav.catalog' },
   { href: '/store', key: 'nav.store' },
   { href: '/auctions', key: 'nav.auctions' },
   { href: '/root', key: 'nav.root' },

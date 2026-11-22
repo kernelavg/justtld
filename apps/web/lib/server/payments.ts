@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { ApiError, type PaymentOrderDto } from '@justtld/shared';
+import { ApiError, computeCatalogPrice, isReservedTld, type PaymentOrderDto } from '@justtld/shared';
 import {
   boostAuction,
   boostStoreListing,
@@ -9,6 +9,7 @@ import {
   getPaymentOrderById,
   getStoreListingById,
   getStorePricing,
+  getSubdomainByName,
   getZoneByTld,
   linkAuctionOrder,
   markAuctionSettled,
@@ -264,6 +265,7 @@ export async function createCheckoutOrder(input: {
   listingId?: string;
   tld?: string;
   subLabel?: string;
+  catalogPrice?: boolean;
   provider: PaymentProvider;
   currency?: string;
   periodDays?: number;
@@ -294,8 +296,11 @@ export async function createCheckoutOrder(input: {
     if (!tld) {
       throw ApiError.badRequest('MISSING_TLD', 'Укажите имя зоны');
     }
+    if (isReservedTld(tld)) {
+      throw ApiError.badRequest('TLD_RESERVED', `Зона ${tld} зарезервирована системой`);
+    }
     if (input.kind === 'custom_zone') {
-      if (!pricing.customZoneEnabled) {
+      if (!pricing.customZoneEnabled && !input.catalogPrice) {
         throw ApiError.forbidden('Покупка произвольных зон отключена администратором');
       }
       const [existingZone, existingCustody] = await Promise.all([
@@ -310,14 +315,60 @@ export async function createCheckoutOrder(input: {
         throw ApiError.conflict('ZONE_TAKEN', `Зона ${tld} уже занята`);
       }
       const years = Math.max(1, Math.round(periodDays / 365));
-      priceRub = pricing.customZonePriceRub * years;
-      priceUsdt = Number((pricing.customZonePriceUsdt * years).toFixed(2));
+      if (input.catalogPrice) {
+        const dynamic = computeCatalogPrice(tld, '');
+        priceRub = dynamic.priceRub * years;
+        priceUsdt = Number((dynamic.priceUsdt * years).toFixed(2));
+      } else {
+        priceRub = pricing.customZonePriceRub * years;
+        priceUsdt = Number((pricing.customZonePriceUsdt * years).toFixed(2));
+      }
     } else if (input.kind === 'custom_subdomain') {
-      if (!pricing.customSubdomainEnabled || !subLabel) {
+      if ((!pricing.customSubdomainEnabled && !input.catalogPrice) || !subLabel) {
         throw ApiError.badRequest('INVALID_SUBDOMAIN_ORDER', 'Укажите поддомен');
       }
-      priceRub = pricing.customSubdomainPriceRub;
-      priceUsdt = pricing.customSubdomainPriceUsdt;
+      if (
+        !/^[a-z0-9-]+$/.test(subLabel) ||
+        subLabel.startsWith('-') ||
+        subLabel.endsWith('-') ||
+        subLabel.includes('--')
+      ) {
+        throw ApiError.badRequest('LABEL_INVALID', 'Некорректное имя поддомена');
+      }
+      const fullSubName = `${subLabel}.${tld.replace(/^\./, '')}`;
+      const [existingSub, existingSubCustody, parentZone, parentCustody] = await Promise.all([
+        getSubdomainByName(fullSubName),
+        getCustody(tld, subLabel),
+        getZoneByTld(tld),
+        getCustody(tld, ''),
+      ]);
+      const nowMs = Date.now();
+      const subOccupied =
+        (existingSub && existingSub.status === 'active') ||
+        (existingSubCustody && new Date(existingSubCustody.expiresAt).getTime() > nowMs);
+      if (subOccupied) {
+        throw ApiError.conflict('SUBDOMAIN_TAKEN', `Поддомен ${fullSubName} уже занят`);
+      }
+      const parentOwner =
+        parentZone && parentZone.status === 'active'
+          ? parentZone.ownerAddress.toLowerCase()
+          : parentCustody && new Date(parentCustody.expiresAt).getTime() > nowMs
+            ? parentCustody.ownerAddress.toLowerCase()
+            : null;
+      if (parentOwner && parentOwner !== input.buyerAddress.toLowerCase()) {
+        throw ApiError.conflict(
+          'PARENT_ZONE_OWNED',
+          `Зона ${tld} принадлежит другому владельцу — выберите поддомен в свободной зоне`,
+        );
+      }
+      if (input.catalogPrice) {
+        const dynamic = computeCatalogPrice(tld, subLabel);
+        priceRub = dynamic.priceRub;
+        priceUsdt = dynamic.priceUsdt;
+      } else {
+        priceRub = pricing.customSubdomainPriceRub;
+        priceUsdt = pricing.customSubdomainPriceUsdt;
+      }
     }
   }
 

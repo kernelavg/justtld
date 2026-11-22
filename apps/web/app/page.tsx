@@ -150,12 +150,12 @@ export default function HomePage() {
 
               <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
                 <Button asChild size="lg" className="rounded-full px-6">
-                  <Link href="/store">
-                    Открыть магазин <ArrowRight className="h-3.5 w-3.5" />
+                  <Link href="/catalog">
+                    Каталог 5M+ доменов (100–1500 ₽) <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="rounded-full px-6">
-                  <Link href="/zones">{t('home.ctaExplore')}</Link>
+                  <Link href="/store">Магазин и P2P</Link>
                 </Button>
               </div>
             </div>

@@ -28,6 +28,7 @@ export const POST = route(
       listingId: body.listingId,
       tld: body.tld,
       subLabel: body.subLabel,
+      catalogPrice: body.catalogPrice,
       provider: body.provider,
       currency: body.currency,
     });

@@ -1,4 +1,5 @@
 export * from './tld';
+export * from './catalog-million';
 export * from './types';
 export * from './schemas';
 export * from './format';

@@ -1089,4 +1089,57 @@ export async function getIcannDirectoryEntry(rawName: string): Promise<IcannDire
   };
 }
 
+/**
+ * Пакетно проверяет, какие зоны и поддомены из списка уже заняты в реестре
+ * (`zones`, `subdomains`, `zone_custody`). Ключ: `${tld}|${subLabel}`.
+ */
+export async function getOccupiedAssetsSet(
+  items: Array<{ tld: string; subLabel: string }>,
+): Promise<Set<string>> {
+  const occupied = new Set<string>();
+  if (items.length === 0) return occupied;
+
+  const tlds = Array.from(new Set(items.map((i) => i.tld.toLowerCase())));
+  const subNames = Array.from(
+    new Set(
+      items
+        .filter((i) => i.subLabel)
+        .map((i) => `${i.subLabel.toLowerCase()}.${i.tld.toLowerCase().replace(/^\./, '')}`),
+    ),
+  );
+
+  const [zoneRows, custodyRows, subRows] = await Promise.all([
+    queryRows<{ tld: string }>(
+      `SELECT tld FROM zones WHERE tld = ANY($1::text[]) AND status = 'active'`,
+      [tlds],
+    ),
+    queryRows<{ tld: string; sub_label: string }>(
+      `SELECT tld, sub_label FROM zone_custody WHERE tld = ANY($1::text[]) AND expires_at > now()`,
+      [tlds],
+    ),
+    subNames.length > 0
+      ? queryRows<{ name: string }>(
+          `SELECT name FROM subdomains WHERE name = ANY($1::text[]) AND status = 'active'`,
+          [subNames],
+        )
+      : Promise.resolve([]),
+  ]);
+
+  for (const r of zoneRows) {
+    occupied.add(`${r.tld.toLowerCase()}|`);
+  }
+  for (const r of custodyRows) {
+    occupied.add(`${r.tld.toLowerCase()}|${r.sub_label.toLowerCase()}`);
+  }
+  for (const r of subRows) {
+    const parts = r.name.toLowerCase().split('.');
+    if (parts.length === 2 && parts[0] && parts[1]) {
+      occupied.add(`.${parts[1]}|${parts[0]}`);
+    }
+  }
+
+  return occupied;
+}
+
+
 

@@ -262,6 +262,9 @@ export default function StorePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild size="sm" variant="outline" className="rounded-full">
+            <Link href="/catalog">Каталог 5 000 000+ зон и поддоменов (100–1500 ₽) →</Link>
+          </Button>
           {sessionState?.account ? (
             <Badge variant="success" className="px-3 py-1 text-xs">
               {sessionState.account.email}

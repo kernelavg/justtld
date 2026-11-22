@@ -233,6 +233,7 @@ export const createOrderSchema = z.object({
     .max(32)
     .optional()
     .default(''),
+  catalogPrice: z.boolean().optional().default(false),
   provider: z.enum(['yoomoney', 'cryptobot', 'sandbox']),
   currency: z.enum(['RUB', 'USDT', 'TON', 'BTC', 'ETH']).default('RUB'),
   buyerEmail: emailSchema.optional(),

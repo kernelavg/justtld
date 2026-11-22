@@ -3,11 +3,15 @@ import { createHash, createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   adminAdSlotSchema,
+  computeCatalogPrice,
   createAuctionSchema,
+  isReservedTld,
   monetizationOrderSchema,
   p2pListingCreateSchema,
   placeAuctionBidSchema,
+  queryMillionCatalog,
   siteFilePathSchema,
+  TOTAL_CATALOG_ITEMS,
 } from '@justtld/shared';
 import { assertSameOrigin } from '../lib/server/http';
 import { hashPassword, verifyPassword } from '@/lib/server/accounts';
@@ -170,5 +174,32 @@ describe('V2: безопасность аккаунтов, файлов, DNS и 
         targetUrl: 'https://t.me/JustTLD',
       }).placement,
     ).toBe('store_top');
+  });
+
+  it('генерирует 5+ млн зон и поддоменов с ценами строго 100–1500 ₽ и быстрой пагинацией', () => {
+    expect(TOTAL_CATALOG_ITEMS).toBeGreaterThan(5_000_000);
+
+    const p1 = queryMillionCatalog({ page: 1, limit: 24 });
+    expect(p1.items).toHaveLength(24);
+    const p100k = queryMillionCatalog({ page: 100_000, limit: 24 });
+    expect(p100k.items).toHaveLength(24);
+
+    for (const item of [...p1.items, ...p100k.items]) {
+      expect(item.priceRub).toBeGreaterThanOrEqual(100);
+      expect(item.priceRub).toBeLessThanOrEqual(1500);
+      expect(isReservedTld(item.tld)).toBe(false);
+    }
+
+    const searchRes = queryMillionCatalog({ q: 'shop.femboy', page: 1, limit: 12 });
+    expect(searchRes.items[0]?.displayName).toBe('shop.femboy');
+    expect(searchRes.items[0]?.isExactMatch).toBe(true);
+    expect(searchRes.items[0]?.priceRub).toBe(computeCatalogPrice('.femboy', 'shop').priceRub);
+
+    const cheapOnly = queryMillionCatalog({ minPrice: 100, maxPrice: 200, limit: 24 });
+    expect(cheapOnly.items.length).toBeGreaterThan(0);
+    for (const item of cheapOnly.items) {
+      expect(item.priceRub).toBeGreaterThanOrEqual(100);
+      expect(item.priceRub).toBeLessThanOrEqual(200);
+    }
   });
 });

@@ -12,6 +12,7 @@ export const dictionary = {
     en: 'Your zone. Your site. Your rules.',
   },
   'nav.home': { ru: 'Главная', en: 'Home' },
+  'nav.catalog': { ru: 'Каталог 5M', en: '5M Catalog' },
   'nav.store': { ru: 'Магазин', en: 'Store' },
   'nav.auctions': { ru: 'Аукционы', en: 'Auctions' },
   'nav.zones': { ru: 'Зоны', en: 'Zones' },
